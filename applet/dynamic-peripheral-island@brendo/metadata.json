@@ -1,0 +1,9 @@
+{
+  "uuid": "dynamic-peripheral-island@brendo",
+  "name": "Dynamic Peripheral Island",
+  "description": "Unified Dynamic Island for wireless peripherals (AJAZZ AJ179 V2, Havit Fuxi H3, GameSir Nova Lite, EasySMX 9124, Machenike K500 Safe Mode) and Antigravity View Usage telemetry.",
+  "version": "1.0.0",
+  "max-instances": 1,
+  "author": "Brendo Freitas",
+  "icon": "input-mouse-symbolic"
+}

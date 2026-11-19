@@ -1,0 +1,44 @@
+# Dynamic Peripheral Island — Linux udev rules for non-root hardware telemetry & control
+# Install to: /etc/udev/rules.d/99-dynamic-peripheral-island.rules
+# Reload with: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# ---------------------------------------------------------------------------
+# 1. AJAZZ AJ179 V2 (VID 249a, PID 5c2f)
+# ---------------------------------------------------------------------------
+SUBSYSTEM=="usb", ATTR{idVendor}=="249a", ATTR{idProduct}=="5c2f", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="249a", ATTRS{idProduct}=="5c2f", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="249a", ATTRS{idProduct}=="5c2f", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# AJAZZ / Compx Wireless Family (VID 248a, any PID)
+SUBSYSTEM=="usb", ATTR{idVendor}=="248a", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="248a", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="248a", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ---------------------------------------------------------------------------
+# 2. Havit Fuxi H3 2.4GHz Dongle (VID 040b, PID 0897)
+# ---------------------------------------------------------------------------
+SUBSYSTEM=="usb", ATTR{idVendor}=="040b", ATTR{idProduct}=="0897", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="040b", ATTRS{idProduct}=="0897", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="040b", ATTRS{idProduct}=="0897", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ---------------------------------------------------------------------------
+# 3. Machenike K500-B94 Wired Keyboard (VID 258a, PID 0049)
+# NOTE: Driver enforces strict Hardware Safe Mode (read-only passive telemetry)
+# ---------------------------------------------------------------------------
+SUBSYSTEM=="usb", ATTR{idVendor}=="258a", ATTR{idProduct}=="0049", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="0049", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="0049", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ---------------------------------------------------------------------------
+# 4. GameSir Nova Lite (VID 3537: 1041 active, 2106 standby dongle)
+# ---------------------------------------------------------------------------
+SUBSYSTEM=="usb", ATTR{idVendor}=="3537", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="3537", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="3537", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ---------------------------------------------------------------------------
+# 5. EasySMX 9124 Gamepad (VID 045e, PID 028e — USB-C & 2.4GHz Dongle)
+# ---------------------------------------------------------------------------
+SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="input", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", MODE="0666", GROUP="plugdev", TAG+="uaccess"

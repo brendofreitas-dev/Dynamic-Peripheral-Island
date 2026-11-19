@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Executable entrypoint for Dynamic Peripheral Island (`dpi-hub`)."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+def _bootstrap_src() -> None:
+    candidates = []
+    env_src = os.environ.get("DPI_CORE_SRC")
+    if env_src:
+        candidates.append(Path(env_src))
+
+    resolved_root = Path(__file__).resolve().parent.parent
+    candidates.append(resolved_root / "src")
+    candidates.append(Path("/home/brendo/Projetos/Dynamic-Peripheral-Island/src"))
+
+    for src_dir in candidates:
+        if (src_dir / "dpi_core").is_dir():
+            src_str = str(src_dir)
+            if src_str not in sys.path:
+                sys.path.insert(0, src_str)
+            return
+
+
+_bootstrap_src()
+
+from dpi_core.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

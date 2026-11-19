@@ -298,6 +298,14 @@ class AjazzMouseDriver:
     CMD_LED = 0x05
     CMD_SLEEP = 0x06
 
+    # Live read opcodes observed on AJAZZ AJ179 V2 (VID 249a:5c2f) firmware
+    CMD_INFO = 0x10
+    CMD_POLLING_READ = 0x12
+    CMD_DPI_READ = 0x13
+    CMD_LED_READ = 0x14
+    CMD_SLEEP_READ = 0x17
+    CMD_ASYNC_BATTERY = 0xC0
+
     VALID_POLLING_RATES = {125: 0x08, 250: 0x04, 500: 0x02, 1000: 0x01}
     POLLING_FROM_CODE = {v: k for k, v in VALID_POLLING_RATES.items()}
     DEFAULT_DPI_STAGES = [400, 800, 1600, 3200, 6400, 12000]
@@ -381,8 +389,14 @@ class AjazzMouseDriver:
         """Send a 33-byte vendor HID frame and read a 32-byte response if available."""
         frame = build_packet(cmd, write=write, payload=payload)
         fd: Optional[int] = None
+        locked = False
         try:
             fd = os.open(dev_path, os.O_RDWR | os.O_NONBLOCK)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                locked = True
+            except OSError:
+                pass
             # Drain stale buffered packets if any
             for _ in range(4):
                 ready, _, _ = select.select([fd], [], [], 0.0)
@@ -398,19 +412,32 @@ class AjazzMouseDriver:
             if written != len(frame):
                 return None
 
-            ready, _, _ = select.select([fd], [], [], self.io_timeout)
-            if not ready:
-                return None
-            resp = os.read(fd, 64)
-            if len(resp) == 33 and resp[0] == 0x00:
-                resp = resp[1:]
-            if len(resp) == 32:
-                return resp
-            return None
+            deadline = time.monotonic() + self.io_timeout
+            last_resp: Optional[bytes] = None
+            for _ in range(4):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                ready, _, _ = select.select([fd], [], [], remaining)
+                if not ready:
+                    break
+                resp = os.read(fd, 64)
+                if len(resp) == 33 and resp[0] == 0x00:
+                    resp = resp[1:]
+                if len(resp) == 32:
+                    last_resp = resp
+                    if resp[0] == (cmd & 0xFF) or resp[0] == self.CMD_ASYNC_BATTERY:
+                        return resp
+            return last_resp
         except OSError:
             return None
         finally:
             if fd is not None:
+                if locked:
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                    except OSError:
+                        pass
                 try:
                     os.close(fd)
                 except OSError:
@@ -462,29 +489,58 @@ class AjazzMouseDriver:
         base_conn = "2.4GHz" if is_wireless else "USB-C"
 
         live_ok = False
-        # Query battery & charging status
-        # Note: in PAW3395 deep sleep, the 2.4GHz receiver replies with status=0xFF / len=0 (all-zero payload).
-        bat_resp = self._hid_exchange(node["dev_path"], self.CMD_BATTERY, write=False)
-        if (
-            bat_resp is not None
-            and verify_checksum(bat_resp)
-            and bat_resp[0] == self.CMD_BATTERY
-            and bat_resp[2] != 0xFF
-            and bat_resp[3] > 0
-        ):
-            pct = bat_resp[4]
-            if 1 <= pct <= 100:
-                state["battery"] = int(pct)
-                state["charging"] = bool(bat_resp[5] == 1)
+
+        # 1. Query primary device info opcode (0x10) used by AJAZZ AJ179 V2 firmware
+        # Example live response: 10 00 01 0b 4e 36 32 34 84 01 11 01 00 30 01 ... b2
+        #   resp[12] = charging (0x01), resp[13] = battery % (0x30 = 48%), resp[14] = online (0x01)
+        info_resp = self._hid_exchange(node["dev_path"], self.CMD_INFO, write=False)
+        if info_resp is not None and len(info_resp) >= 32:
+            if info_resp[0] == self.CMD_ASYNC_BATTERY and 1 <= info_resp[2] <= 100:
+                state["battery"] = int(info_resp[2])
                 live_ok = True
+            elif (
+                info_resp[0] == self.CMD_INFO
+                and info_resp[2] != 0xFF
+                and (info_resp[1] == 0x00 or verify_checksum(info_resp))
+            ):
+                if info_resp[3] >= 11 and 1 <= info_resp[13] <= 100:
+                    state["battery"] = int(info_resp[13])
+                    state["charging"] = bool(info_resp[12] == 0x01)
+                    live_ok = True
+                elif 0 < info_resp[3] < 11 and 1 <= info_resp[4] <= 100:
+                    state["battery"] = int(info_resp[4])
+                    state["charging"] = bool(info_resp[5] == 0x01)
+                    live_ok = True
+
+        # 2. Fallback to CMD_BATTERY (0x04) for alternate firmware / mocked compatibility
+        # Note: in PAW3395 deep sleep, the 2.4GHz receiver replies with status=0xFF / len=0 (all-zero payload).
+        if not live_ok:
+            bat_resp = self._hid_exchange(node["dev_path"], self.CMD_BATTERY, write=False)
+            if bat_resp is not None and len(bat_resp) >= 32:
+                if bat_resp[0] == self.CMD_ASYNC_BATTERY and 1 <= bat_resp[2] <= 100:
+                    state["battery"] = int(bat_resp[2])
+                    live_ok = True
+                elif (
+                    verify_checksum(bat_resp)
+                    and bat_resp[0] == self.CMD_BATTERY
+                    and bat_resp[2] != 0xFF
+                    and bat_resp[3] > 0
+                ):
+                    pct = bat_resp[4]
+                    if 1 <= pct <= 100:
+                        state["battery"] = int(pct)
+                        state["charging"] = bool(bat_resp[5] == 1)
+                        live_ok = True
 
         # Optional live DPI / Polling / LED / Sleep readback when awake
         if live_ok:
-            dpi_resp = self._hid_exchange(node["dev_path"], self.CMD_DPI, write=False)
+            dpi_resp = self._hid_exchange(node["dev_path"], self.CMD_DPI_READ, write=False)
+            if dpi_resp is None or dpi_resp[0] != self.CMD_DPI_READ or dpi_resp[2] == 0xFF:
+                dpi_resp = self._hid_exchange(node["dev_path"], self.CMD_DPI, write=False)
             if (
                 dpi_resp is not None
                 and verify_checksum(dpi_resp)
-                and dpi_resp[0] == self.CMD_DPI
+                and dpi_resp[0] in (self.CMD_DPI_READ, self.CMD_DPI)
                 and dpi_resp[2] != 0xFF
                 and dpi_resp[3] >= 3
             ):
@@ -492,14 +548,16 @@ class AjazzMouseDriver:
                 dpi_val = struct.unpack_from("<H", dpi_resp, 5)[0]
                 if 400 <= dpi_val <= 26000:
                     state["current_dpi"] = dpi_val
-                if 0 <= stage < len(state["dpi_stages"]):
-                    state["active_dpi_stage"] = stage
+                    if 0 <= stage < len(state["dpi_stages"]):
+                        state["active_dpi_stage"] = stage
 
-            poll_resp = self._hid_exchange(node["dev_path"], self.CMD_POLLING, write=False)
+            poll_resp = self._hid_exchange(node["dev_path"], self.CMD_POLLING_READ, write=False)
+            if poll_resp is None or poll_resp[0] != self.CMD_POLLING_READ or poll_resp[2] == 0xFF:
+                poll_resp = self._hid_exchange(node["dev_path"], self.CMD_POLLING, write=False)
             if (
                 poll_resp is not None
                 and verify_checksum(poll_resp)
-                and poll_resp[0] == self.CMD_POLLING
+                and poll_resp[0] in (self.CMD_POLLING_READ, self.CMD_POLLING)
                 and poll_resp[2] != 0xFF
                 and poll_resp[3] >= 1
             ):
@@ -507,11 +565,13 @@ class AjazzMouseDriver:
                 if hz:
                     state["polling_rate"] = hz
 
-            led_resp = self._hid_exchange(node["dev_path"], self.CMD_LED, write=False)
+            led_resp = self._hid_exchange(node["dev_path"], self.CMD_LED_READ, write=False)
+            if led_resp is None or led_resp[0] != self.CMD_LED_READ or led_resp[2] == 0xFF:
+                led_resp = self._hid_exchange(node["dev_path"], self.CMD_LED, write=False)
             if (
                 led_resp is not None
                 and verify_checksum(led_resp)
-                and led_resp[0] == self.CMD_LED
+                and led_resp[0] in (self.CMD_LED_READ, self.CMD_LED)
                 and led_resp[2] != 0xFF
                 and led_resp[3] >= 3
             ):
@@ -519,17 +579,30 @@ class AjazzMouseDriver:
                 if any((r, g, b)):
                     state["led_color"] = f"#{r:02X}{g:02X}{b:02X}"
 
-            sleep_resp = self._hid_exchange(node["dev_path"], self.CMD_SLEEP, write=False)
+            sleep_resp = self._hid_exchange(node["dev_path"], self.CMD_SLEEP_READ, write=False)
             if (
                 sleep_resp is not None
                 and verify_checksum(sleep_resp)
-                and sleep_resp[0] == self.CMD_SLEEP
+                and sleep_resp[0] == self.CMD_SLEEP_READ
                 and sleep_resp[2] != 0xFF
-                and sleep_resp[3] >= 2
+                and sleep_resp[3] >= 1
+                and sleep_resp[4] > 0
             ):
-                sec = struct.unpack_from("<H", sleep_resp, 4)[0]
+                sec = int(sleep_resp[4]) * 10
                 if 30 <= sec <= 3600:
                     state["sleep_seconds"] = sec
+            else:
+                sleep_resp = self._hid_exchange(node["dev_path"], self.CMD_SLEEP, write=False)
+                if (
+                    sleep_resp is not None
+                    and verify_checksum(sleep_resp)
+                    and sleep_resp[0] == self.CMD_SLEEP
+                    and sleep_resp[2] != 0xFF
+                    and sleep_resp[3] >= 2
+                ):
+                    sec = struct.unpack_from("<H", sleep_resp, 4)[0]
+                    if 30 <= sec <= 3600:
+                        state["sleep_seconds"] = sec
 
         # Passive power_supply fallback if HID didn't answer
         if not live_ok:

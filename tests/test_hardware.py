@@ -187,6 +187,47 @@ class TestAjazzMouseDriver(unittest.TestCase):
             self.assertEqual(standby_state["current_dpi"], 3200)
             self.assertEqual(standby_state["polling_rate"], 500)
 
+    def test_live_read_0x10_device_info_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            cache_path = root / "config" / "mouse_state.json"
+
+            _make_fake_hidraw_node(
+                hidraw_root,
+                "hidraw4",
+                "249a",
+                "5c2f",
+                hid_name="AJAZZ AJ179 V2 Wireless Receiver",
+                has_input=False,
+                report_descriptor=b"\x06\x00\xff\x95\x20",
+            )
+
+            driver = AjazzMouseDriver(
+                cache_path=cache_path,
+                hidraw_root=hidraw_root,
+                power_supply_root=root / "power",
+            )
+            real_0x10 = bytes.fromhex(
+                "1000010b4e3632348401110100300100000000000000000000000000000000b2"
+            )
+            with mock.patch.object(
+                driver,
+                "_hid_exchange",
+                side_effect=lambda dev, cmd, write=False, payload=b"": (
+                    real_0x10 if cmd == driver.CMD_INFO else None
+                ),
+            ):
+                state = driver.read_state()
+
+            self.assertTrue(state["connected"])
+            self.assertTrue(state["active"])
+            self.assertFalse(state["standby"])
+            self.assertFalse(state["cached"])
+            self.assertEqual(state["battery"], 48)
+            self.assertFalse(state["charging"])
+            self.assertEqual(state["connection_type"], "2.4GHz")
+
     def test_mouse_controls_validation_and_persistence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

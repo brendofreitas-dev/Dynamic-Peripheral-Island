@@ -152,6 +152,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._hoverSignals = [];
         this._seenAlerts = {};
         this._toastState = null;
+        this._lastPayloadHash = "";
+        this._justExpandedCard = null;
 
         this._dpiHubPath = this._resolveDpiHubBinary();
 
@@ -305,9 +307,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         });
         this._leftSlot.add_child(this._segPeripherals);
 
-        // Mid divider between Clock and Antigravity
+        // Mid divider between Clock and Antigravity (hidden: no vertical pipe on TopBar)
         this._midDivider = new St.Widget({ style_class: "dpi-capsule-divider" });
         this._midDivider.y_align = Clutter.ActorAlign.CENTER;
+        this._midDivider.hide();
         this.actor.add_child(this._midDivider);
 
         // Antigravity Segment
@@ -641,12 +644,39 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (this.menu) {
             try {
+                this.menu.sourceActor = this.actor;
                 this.menu.destroy();
             } catch (e) {
                 // ignore
             }
             this.menu = null;
         }
+    }
+
+    menuEventFilter(event) {
+        let src = event ? event.get_source() : null;
+        if (!src) return false;
+        let inLeft = (this._leftSlot && this._leftSlot.contains(src)) ||
+                     (this._segPeripherals && this._segPeripherals.contains(src));
+        let inRight = (this.actor && this.actor.contains(src)) ||
+                      (this._segAntigravity && this._segAntigravity.contains(src));
+        if (!inLeft && !inRight) return false;
+
+        let etype = event.type();
+        if (etype === Clutter.EventType.BUTTON_RELEASE) {
+            return true;
+        }
+        if (etype === Clutter.EventType.BUTTON_PRESS && event.get_button() === 1) {
+            if (inLeft) {
+                this._openTabFromSegment("peripherals");
+                return true;
+            }
+            if (inRight) {
+                this._openTabFromSegment("antigravity");
+                return true;
+            }
+        }
+        return false;
     }
 
     on_applet_clicked(event) {
@@ -661,13 +691,19 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _openTabFromSegment(tabName) {
+        if (!this.menu) return;
         if (this.menu.isOpen && this._activeTab === tabName) {
             this.menu.close(true);
             return;
         }
-        this._activeTab = tabName;
-        this._renderPopover();
-        if (!this.menu.isOpen) {
+        this.menu.sourceActor = (tabName === "peripherals" && this._segPeripherals)
+            ? this._segPeripherals
+            : (this._segAntigravity || this.actor);
+        if (this.menu.isOpen) {
+            this._switchTab(tabName, true);
+        } else {
+            this._activeTab = tabName;
+            this._renderPopover();
             this.menu.open(true);
         }
         this._refreshNow();
@@ -852,6 +888,14 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
             try {
                 let parsed = JSON.parse(stdout);
+                let payloadHash = JSON.stringify({
+                    capsule: parsed.capsule,
+                    peripherals: parsed.peripherals,
+                    antigravity: parsed.antigravity,
+                    settings: parsed.settings,
+                });
+                let payloadChanged = payloadHash !== this._lastPayloadHash;
+                this._lastPayloadHash = payloadHash;
                 this._data = parsed;
 
                 let newInterval = parsed.settings && Number(parsed.settings.poll_interval);
@@ -867,7 +911,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 if (!this._prewarmed) {
                     this._prewarmed = true;
                     this._prewarmPopover();
-                } else if (this.menu && this.menu.isOpen) {
+                } else if (this.menu && this.menu.isOpen && payloadChanged) {
                     this._renderPopover();
                 }
             } catch (parseErr) {
@@ -1144,13 +1188,6 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             }
         });
 
-        let menuItem = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            hover: false,
-            focusOnHover: false,
-            style_class: "",
-        });
-
         this._popoverRoot = new St.BoxLayout({
             vertical: true,
             style_class: "dpi-popover-root dpi-theme-dark",
@@ -1191,8 +1228,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._scrollView.add_actor(this._bodyStack);
         this._popoverRoot.add_child(this._scrollView);
 
-        menuItem.addActor(this._popoverRoot, { expand: true, span: -1 });
-        this.menu.addMenuItem(menuItem);
+        this.menu.addActor(this._popoverRoot);
     }
 
     _renderPopover() {
@@ -1201,7 +1237,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._renderHeader();
         this._renderTabBar();
         this._renderToastBanner();
+        this._renderActiveTabBody();
+        this._justExpandedCard = null;
+    }
 
+    _renderActiveTabBody() {
+        if (!this._bodyStack) return;
         this._bodyStack.destroy_all_children();
         if (this._activeTab === "peripherals") {
             this._renderPeripheralsTab();
@@ -1210,6 +1251,44 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         } else {
             this._renderSettingsTab();
         }
+    }
+
+    _switchTab(newTabId, animate = true) {
+        if (!this._popoverRoot) return;
+        let order = ["peripherals", "antigravity", "settings"];
+        let oldIdx = Math.max(0, order.indexOf(this._activeTab));
+        let newIdx = Math.max(0, order.indexOf(newTabId));
+        let dir = newIdx >= oldIdx ? 1 : -1;
+
+        this._activeTab = newTabId;
+        this._justExpandedCard = null;
+        this._syncSegmentHighlight();
+        this._renderTabBar();
+        this._renderActiveTabBody();
+
+        if (animate && this._bodyStack) {
+            this._bodyStack.remove_all_transitions();
+            this._bodyStack.opacity = 0;
+            this._bodyStack.translation_x = dir * 14;
+            this._bodyStack.ease({
+                opacity: 255,
+                translation_x: 0,
+                duration: 180,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
+    }
+
+    _animateCardBody(body, cardKey) {
+        if (!body || this._justExpandedCard !== cardKey) return;
+        body.opacity = 0;
+        body.translation_y = -6;
+        body.ease({
+            opacity: 255,
+            translation_y: 0,
+            duration: 160,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
     }
 
     _renderHeader() {
@@ -1294,9 +1373,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             });
             btn.connect("clicked", () => {
                 if (this._activeTab !== tab.id) {
-                    this._activeTab = tab.id;
-                    this._syncSegmentHighlight();
-                    this._renderPopover();
+                    this._switchTab(tab.id, true);
                 }
             });
             this._tabBar.add_child(btn);
@@ -1379,6 +1456,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (expanded) {
             let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", x_expand: true });
+            this._animateCardBody(body, "mouse");
 
             // DPI Presets (combines hardware dpi_stages with standard presets, sorted & deduplicated)
             let curDpi = Number(mouse.current_dpi) || 0;
@@ -1484,6 +1562,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (expanded) {
             let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", x_expand: true });
+            this._animateCardBody(body, "headset");
 
             // Volume Controls
             let curVol = vol !== null ? vol : 70;
@@ -1605,6 +1684,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (expanded) {
             let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", x_expand: true });
+            this._animateCardBody(body, "gamepad");
 
             if (controllers.length === 0) {
                 body.add_child(new St.Label({
@@ -1738,6 +1818,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (expanded) {
             let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", x_expand: true });
+            this._animateCardBody(body, "keyboard");
             body.add_child(this._makeSectionLabel("ATALHOS FISICOS (PROTECAO MCU SINO WEALTH)"));
 
             let shortcuts = Array.isArray(keyboard.shortcuts) && keyboard.shortcuts.length > 0
@@ -2249,7 +2330,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             child: row,
         });
         btn.connect("clicked", () => {
-            this._expandedCards[opts.cardKey] = !this._expandedCards[opts.cardKey];
+            let nextExpanded = !this._expandedCards[opts.cardKey];
+            this._expandedCards[opts.cardKey] = nextExpanded;
+            this._justExpandedCard = nextExpanded ? opts.cardKey : null;
             this._renderPopover();
         });
         return btn;

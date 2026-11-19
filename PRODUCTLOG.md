@@ -33,14 +33,14 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
 | `design-docs` | Gemini 4 Hydrogen (Medium) | Tokens UI/UX Pro Max (`MASTER.md`, `tokens.json`, `tokens.css`), governança e documentação técnica. |
 | `test-verifier` | Gemini 4 Hydrogen (High) | Suíte `unittest` (`tests/test_*.py`), auditoria cruzada, instalação runtime e commit inicial. |
 
-### 2.1. Evolução do Swarm na v1.0.2 e Agente `docs-git`
+### 2.1. Evolução do Swarm na v1.0.2–v1.0.4 e Agente `docs-git`
 
-Por solicitação direta do usuário, todos os workers do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), enquanto o `coordinator` foi configurado para **Gemini 4 Neon (High)** (`gemini-4-neon-high`).
+O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), com os workers do Swarm em **Gemini 3.8 Flash (High)** / **Orchestrator (Argon)**.
 Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/docs-git.md`) para centralizar a governança da documentação técnica contínua, auditoria de integridade e geração de commits semânticos no Git (Conventional Commits).
 
 | Agente | Modelo Ativo | Papel Atualizado |
 | :--- | :--- | :--- |
-| `coordinator` | `Gemini 4 Neon (High)` | Orquestração do Swarm e alinhamento de entregáveis. |
+| `coordinator` | `Orchestrator (Argon)` | Orquestração do Swarm e alinhamento de entregáveis. |
 | `hw-engine` | `Gemini 3.8 Flash (High)` | Drivers de hardware Python stdlib (`src/dpi_core/hardware.py`). |
 | `ag-engine` | `Gemini 3.8 Flash (High)` | Coletor Antigravity ConnectRPC e CLI (`src/dpi_core/antigravity.py`, `cli.py`). |
 | `island-ui` | `Gemini 3.8 Flash (High)` | Applet Cinnamon CJS (`applet.js`, `stylesheet.css`, `metadata.json`). |
@@ -127,6 +127,36 @@ Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/d
   - `install.sh`: inclusão do comando D-Bus `org.Cinnamon.ReloadTheme` antes de `org.Cinnamon.ReloadXlet` para garantir aplicação atômica de estilos.
   - `tests/test_cli_and_applet.py`: testes unitários adicionados para validar a inserção de `_leftSlot`, transparência em idle, classes de hover e presença de `ReloadTheme` no script de instalação.
 - **Validação**: 30/30 testes aprovados, reload de tema e applet validados sem erros no `~/.xsession-errors`, transição contínua sem piscar entre os elementos centrais e transparência perfeita da barra em repouso.
+
+### `BUG-003` — Fechamento Prematuro do Popover ao Soltar o Clique no Segmento Esquerdo (`_leftSlot`) (`2026-11-19`)
+- **Severidade**: Alta (impedia que o clique normal no segmento esquerdo de Periféricos mantivesse o Popover aberto).
+- **Causa Raiz**:
+  - Quando `this.menu.open(true)` é chamado durante `button-press-event`, o `PopupMenuManager` do Cinnamon entra em captura global de eventos (`_onEventCapture` em `popupMenu.js:3688`).
+  - No `BUTTON_RELEASE` subsequente, `PopupMenuManager` verifica `_activeMenuContains(event.get_source())`, que testa apenas se o ator clicado está dentro de `this.menu.actor` ou `this.menu.sourceActor` (por padrão `this.actor`, posicionado à direita do relógio).
+  - Como `this._leftSlot` (segmento de Periféricos) é inserido diretamente em `panel._centerBox` à esquerda do relógio (fora de `this.actor`), `_activeMenuContains` retornava `false` no `BUTTON_RELEASE` e fechava o menu imediatamente ao soltar o botão do mouse.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: implementação do hook oficial `menuEventFilter(event)` do Cinnamon (invocado em `popupMenu.js:3673` antes da lógica de fechamento) retornando `true` para eventos `BUTTON_RELEASE` e tratando `BUTTON_PRESS` em `this._leftSlot` / `this._segPeripherals` e `this.actor` / `this._segAntigravity`; atualização dinâmica de `this.menu.sourceActor` em `_openTabFromSegment(tabName)` para o segmento clicado e restauração de `this.menu.sourceActor = this.actor` no unload; ocultação do divisor vertical (`this._midDivider.hide()`) entre Data/Hora e Antigravity.
+  - `tests/test_cli_and_applet.py`: testes cobrindo `menuEventFilter(event)`, `Clutter.EventType.BUTTON_RELEASE`, atualização de `this.menu.sourceActor` e `this._midDivider.hide()`.
+- **Validação**: 30/30 testes aprovados e validação em runtime no Cinnamon confirmando abertura estável e alinhada do Popover ao clicar tanto em Periféricos (esquerda) quanto em Antigravity (direita).
+
+### `UX-003` — Alinhamento Visual e Temático das 3 Abas do Popover com o Calendário Nativo (`2026-11-19`)
+- **Severidade**: Média (coesão visual com os applets nativos do Cinnamon).
+- **Causa Raiz**:
+  - O Popover usava um `PopupMenu.PopupBaseMenuItem` envolvendo `this._popoverRoot`, criando uma caixa e borda interna duplicada dentro do `.popup-menu`, além de cores de superfície (`rgba(15, 23, 42, ...)`) distintas do `calendar@cinnamon.org`.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: remoção de `PopupMenu.PopupBaseMenuItem` em `_buildPopover()` e anexação direta via `this.menu.addActor(this._popoverRoot)` (idêntico ao `calendar@cinnamon.org`).
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: `.dpi-popover-root` transparente usando a moldura nativa `.popup-menu` do tema Cinnamon; superfícies `.dpi-tab-bar`, `.dpi-card`, `.dpi-hero-box` e `.dpi-metric-tile` em `#282a36` com `border: 1px solid rgba(25, 26, 34, 0.9)` e `border-radius: 4px`; subcards/rows em `#232530`; chips e botões em `#2c2f3c` (hover `#373a4b`); estados selecionados/ativos em `rgba(189, 147, 249, 0.5)` e trilhas de barra em `#191a22`.
+  - `tests/test_cli_and_applet.py`: asserções validando `this.menu.addActor(this._popoverRoot)` e a paleta do Calendário em `stylesheet.css`.
+- **Validação**: Reload de tema (`org.Cinnamon.ReloadTheme`) e applet (`org.Cinnamon.ReloadXlet`) sem erros ou warnings em `~/.xsession-errors`.
+
+### `UX-004` — Transições Fluidas entre Abas e Expansão de Cards no Popover (`2026-11-19`)
+- **Severidade**: Baixa (polimento de micro-interações no Popover Bento Grid).
+- **Causa Raiz**:
+  - A troca de abas reconstruía todo o Popover instantaneamente sem transição espacial, e o polling periódico de 5s re-renderizava o Popover aberto mesmo quando o payload JSON não havia mudado.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: criação de `_switchTab(newTabId, animate = true)` animando `this._bodyStack.ease({ opacity: 255, translation_x: 0, duration: 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC })` a partir de `translation_x = dir * 14`; criação de `_animateCardBody(body, cardKey)` animando a expansão de cards (`translation_y: -6 -> 0`, `160ms`, `EASE_OUT_QUAD`); comparação de `payloadHash` em `_refreshNow()` para evitar re-renderização redundante com o menu aberto.
+  - `tests/test_cli_and_applet.py`: asserções garantindo a presença de `_switchTab`, `_animateCardBody`, `translation_x` e `EASE_OUT_CUBIC`.
+- **Validação**: 30/30 testes aprovados e transições verificadas em runtime no Cinnamon.
 
 ---
 

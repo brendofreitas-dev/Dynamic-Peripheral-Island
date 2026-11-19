@@ -369,6 +369,29 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertNotIn('this._segPeripherals.connect("button-release-event"', src)
         self.assertNotIn('this._segAntigravity.connect("button-release-event"', src)
 
+        # BUG-003: menuEventFilter intercepts BUTTON_RELEASE and BUTTON_PRESS on _leftSlot/_segPeripherals
+        self.assertIn("menuEventFilter(event)", src)
+        self.assertIn("Clutter.EventType.BUTTON_RELEASE", src)
+        self.assertIn("Clutter.EventType.BUTTON_PRESS", src)
+        self.assertIn("this._leftSlot.contains(src)", src)
+        self.assertIn("this._segPeripherals.contains(src)", src)
+        self.assertIn("this.menu.sourceActor =", src)
+        self.assertIn("this.menu.sourceActor = this.actor;", src)
+
+        # No vertical pipe divider on TopBar
+        self.assertIn("this._midDivider.hide();", src)
+
+        # UX-003: Popover attaches _popoverRoot directly via menu.addActor without PopupBaseMenuItem
+        self.assertIn("this.menu.addActor(this._popoverRoot);", src)
+        self.assertNotIn("PopupBaseMenuItem", src)
+
+        # UX-004: Fluid tab switching and card expansion animations
+        self.assertIn("_switchTab(newTabId, animate = true)", src)
+        self.assertIn("this._bodyStack.ease(", src)
+        self.assertIn("translation_x: 0", src)
+        self.assertIn("_animateCardBody(body, cardKey)", src)
+        self.assertIn("translation_y: 0", src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -442,6 +465,22 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIsNotNone(segment_match)
         self.assertIn("border-radius: 6px;", segment_match.group(1))
         self.assertNotIn("999px", segment_match.group(1))
+
+        # UX-003: Popover uses native Cinnamon Calendar palette and transparent root (no double frame)
+        popover_root = re.search(r"\.dpi-popover-root\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(popover_root)
+        self.assertIn("background-color: transparent;", popover_root.group(1))
+        self.assertIn("border: none;", popover_root.group(1))
+        for cal_token in (
+            "#282a36",
+            "#232530",
+            "#2c2f3c",
+            "#373a4b",
+            "#191a22",
+            "rgba(189, 147, 249, 0.5)",
+            "rgba(25, 26, 34, 0.9)",
+        ):
+            self.assertIn(cal_token, css)
 
         emoji_re = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
         self.assertIsNone(emoji_re.search(css), msg="stylesheet.css must not contain structural emojis")

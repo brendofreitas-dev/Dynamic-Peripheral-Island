@@ -5,6 +5,23 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.4] - 2026-11-19
+
+### Corrigido
+- **BUG-003 (Clique no Segmento Esquerdo de Periféricos que Fechava no `BUTTON_RELEASE`)**:
+  - Implementado o método oficial `menuEventFilter(event)` do Cinnamon em `DynamicPeripheralIslandApplet` (`applet/dynamic-peripheral-island@brendo/applet.js`) para interceptar `Clutter.EventType.BUTTON_RELEASE` e `Clutter.EventType.BUTTON_PRESS` originados em `this._leftSlot` / `this._segPeripherals` (que residem fora de `this.actor`), impedindo que `PopupMenuManager._onEventCapture` fechasse o menu ao soltar o botão esquerdo do mouse.
+  - Atualização dinâmica de `this.menu.sourceActor` em `_openTabFromSegment(tabName)` para o segmento clicado (`_segPeripherals` ou `_segAntigravity`), alinhando o Popover diretamente abaixo do segmento ativo e restaurando `this.menu.sourceActor = this.actor` no unload.
+
+### Alterado
+- **Remoção do Pipe Vertical (`|`) na TopBar**:
+  - Ocultado `this._midDivider` (`this._midDivider.hide()`) em `_buildTopBar()`, eliminando a linha divisória vertical entre a Data/Hora e o VU do Antigravity.
+- **UX-003 (Visual e Paleta Idênticos ao Calendário Nativo do Cinnamon)**:
+  - Removido o wrapper `PopupMenu.PopupBaseMenuItem` em `_buildPopover()`, anexando `this._popoverRoot` diretamente via `this.menu.addActor(this._popoverRoot)` (mesmo padrão do `calendar@cinnamon.org`) para eliminar a borda/caixa dupla.
+  - Harmonizada toda a paleta dark de `stylesheet.css` com o calendário nativo do tema Cinnamon: `.dpi-popover-root` transparente sobre a moldura `.popup-menu`, cards/abas/tiles em `#282a36` com borda `1px solid rgba(25, 26, 34, 0.9)` e `border-radius: 4px`, subcards/linhas em `#232530`, botões/chips em `#2c2f3c` (hover `#373a4b`), estados ativos em `rgba(189, 147, 249, 0.5)` e trilhas de barra em `#191a22`.
+- **UX-004 (Transições Fluidas entre Abas e Cards)**:
+  - Implementado `_switchTab(newTabId, animate = true)` animando `this._bodyStack.ease({ opacity: 255, translation_x: 0, duration: 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC })` com deslocamento direcional (`dir * 14px`).
+  - Adicionado `_animateCardBody(body, cardKey)` para animar a expansão de cards de periféricos (`translation_y: -6 -> 0`, `160ms`, `EASE_OUT_QUAD`) e verificação de `payloadHash` em `_refreshNow()` para evitar re-renderizações desnecessárias quando o Popover está aberto.
+
 ## [1.0.3] - 2026-11-19
 
 ### Adicionado

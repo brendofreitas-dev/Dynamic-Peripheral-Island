@@ -49,11 +49,11 @@ Regras inegociáveis para qualquer alteração em `K500KeyboardDriver`:
 
 ## 4. Topologia do Swarm e Governança de Agentes
 
-Por solicitação direta do usuário, todos os workers do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), enquanto o `coordinator` opera em **Gemini 4 Neon (High)** (`gemini-4-neon-high`), garantindo orquestração de alto nível, conformidade de contratos e governança determinística.
+O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), com os workers do Swarm em **Gemini 3.8 Flash (High)** / **Orchestrator (Argon)** conforme disponibilidade de cota, garantindo orquestração de alto nível, conformidade de contratos e governança determinística.
 
 | Agente | Modelo Ativo | Papel e Escopo de Atuação |
 | :--- | :--- | :--- |
-| `coordinator` | `Gemini 4 Neon (High)` | Orquestração do Swarm, planejamento de alto nível e despacho de tarefas. |
+| `coordinator` | `Orchestrator (Argon)` | Orquestração do Swarm, planejamento de alto nível e despacho de tarefas. |
 | `hw-engine` | `Gemini 3.8 Flash (High)` | Drivers de hardware Python stdlib (`src/dpi_core/hardware.py`), regras `udev` e comunicação HID/ALSA/evdev. |
 | `ag-engine` | `Gemini 3.8 Flash (High)` | Coletor ConnectRPC Antigravity (`src/dpi_core/antigravity.py`), CLI `dpi-hub` (`src/dpi_core/cli.py`). |
 | `island-ui` | `Gemini 3.8 Flash (High)` | Applet Cinnamon CJS (`applet.js`, `stylesheet.css`, `metadata.json`), tema e interações da TopBar. |

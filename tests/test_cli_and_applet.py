@@ -342,8 +342,18 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".ease(",
             "dpi-unified-capsule",
             "org.cinnamon.desktop.interface",
+            "_prewarmPopover",
         ):
             self.assertIn(token, src)
+
+        # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
+        for lineno, line in enumerate(src.splitlines(), start=1):
+            if "spacing:" in line:
+                self.assertIn(
+                    "style:",
+                    line,
+                    msg=f"GObject spacing property found in applet.js line {lineno}: {line.strip()}",
+                )
 
         # Validate JS syntax via node --check if installed
         node_bin = shutil.which("node")

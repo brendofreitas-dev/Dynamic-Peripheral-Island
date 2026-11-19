@@ -141,6 +141,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._toastTimerId = 0;
         this._idleAttachId = 0;
         this._isPolling = false;
+        this._prewarmed = false;
         this._destroyed = false;
         this._unifiedCenterBox = null;
         this._taggedClockActors = [];
@@ -716,13 +717,37 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._updateTopBar();
                 this._processAlerts(parsed.alerts || []);
 
-                if (this.menu && this.menu.isOpen) {
+                if (!this._prewarmed) {
+                    this._prewarmed = true;
+                    this._prewarmPopover();
+                } else if (this.menu && this.menu.isOpen) {
                     this._renderPopover();
                 }
             } catch (parseErr) {
                 global.logError(UUID + ": failed to parse --island-json: " + parseErr);
             }
         });
+    }
+
+    _prewarmPopover() {
+        if (!this._popoverRoot || this._destroyed) return;
+        let savedTab = this._activeTab;
+        let savedExpanded = Object.assign({}, this._expandedCards);
+
+        this._expandedCards = {
+            mouse: true,
+            headset: true,
+            gamepad: true,
+            keyboard: true,
+        };
+        for (let tabId of ["peripherals", "antigravity", "settings"]) {
+            this._activeTab = tabId;
+            this._renderPopover();
+        }
+
+        this._expandedCards = savedExpanded;
+        this._activeTab = savedTab || "peripherals";
+        this._renderPopover();
     }
 
     _dispatchCliAction(args, pendingText) {
@@ -1047,7 +1072,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let activeModel = this._extractActiveModelName(ag.active_model);
 
         let leftCol = new St.BoxLayout({ vertical: true, x_expand: true });
-        let titleRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let titleRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         titleRow.add_child(new St.Icon({
             icon_name: "view-grid-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1099,7 +1124,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         for (let tab of tabs) {
             let active = this._activeTab === tab.id;
             let content = new St.BoxLayout({
-                spacing: 5,
+                style: "spacing: 5px;",
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
             });
@@ -1419,7 +1444,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 for (let ctrl of controllers) {
                     let sub = new St.BoxLayout({ vertical: true, style_class: "dpi-subcard", x_expand: true });
 
-                    let topRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+                    let topRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
                     topRow.add_child(new St.Label({
                         text: ctrl.name || ctrl.brand || "Gamepad",
                         style_class: "dpi-card-title",
@@ -1515,7 +1540,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Lock badges row (CAPS, NUM, SCROLL)
         let leds = keyboard.leds || {};
-        let locksRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let locksRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         let lockSpecs = [
             { label: "CAPS", on: Boolean(leds.capslock) },
             { label: "NUM", on: Boolean(leds.numlock) },
@@ -1527,7 +1552,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 style_class: lk.on ? "dpi-kbd-badge dpi-kbd-badge-on" : "dpi-kbd-badge",
             }));
         }
-        let safePill = new St.BoxLayout({ spacing: 4, x_expand: true, x_align: Clutter.ActorAlign.END });
+        let safePill = new St.BoxLayout({ style: "spacing: 4px;", x_expand: true, x_align: Clutter.ActorAlign.END });
         safePill.add_child(new St.Icon({
             icon_name: "security-high-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1577,7 +1602,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // 1. Hero Header: Plan, Credits, Active Model
         let hero = new St.BoxLayout({ vertical: true, style_class: "dpi-hero-box", x_expand: true });
-        let topRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let topRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         topRow.add_child(new St.Icon({
             icon_name: "applications-science-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1595,7 +1620,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         let modelName = this._extractActiveModelName(ag.active_model) || "Modelo nao detectado";
         let creditsStr = this._extractPlanCredits(ag.plan);
-        let modelRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let modelRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         modelRow.add_child(new St.Label({
             text: "Modelo Ativo:",
             style_class: "dpi-subtitle",
@@ -1645,7 +1670,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let tone = enabled ? quotaSeverityClass(rem) : "muted";
         let isPinned = pinnedQuotaId === q.id;
 
-        let header = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let header = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         let nameLbl = new St.Label({
             text: q.name || q.short_name || q.id || "Cota",
             style_class: "dpi-card-title",
@@ -1687,7 +1712,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         card.add_child(this._makeProgressBar(rem, tone, remainingPaceMarker));
 
         // Meta row: reset countdown + depletion ETA
-        let metaRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let metaRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         let resetTxt = !enabled
             ? "Nao disponivel no plano atual"
             : (q.reset_countdown && q.reset_countdown !== "--" ? "Reset em " + q.reset_countdown : "Janela ativa");
@@ -1718,7 +1743,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let agents = Array.isArray(swarm.agents) ? swarm.agents : [];
         let activeCount = Number(swarm.active_count) || agents.filter((a) => String(a.status).toUpperCase() === "WORKING").length;
 
-        let header = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let header = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         header.add_child(new St.Icon({
             icon_name: "network-workgroup-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1742,7 +1767,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }));
 
         // Context Tokens Bento Tiles (In, Cache, Out)
-        let tilesRow = new St.BoxLayout({ spacing: 6, x_expand: true });
+        let tilesRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
         let tileSpecs = [
             { label: "IN", value: formatTokens(ctx.input_tokens) },
             { label: "CACHE", value: formatTokens(ctx.cache_read_tokens) },
@@ -1791,7 +1816,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _buildHistogramMonthlyCard(ag) {
         let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
 
-        let header = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let header = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         header.add_child(new St.Icon({
             icon_name: "utilities-system-monitor-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1864,7 +1889,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Monthly Summary & Top Projects
         let totalMonth = Number(monthly.total_tokens) || 0;
-        let summaryRow = new St.BoxLayout({ spacing: 6, y_align: Clutter.ActorAlign.CENTER });
+        let summaryRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
         summaryRow.add_child(new St.Label({
             text: "Total Mensal: " + formatTokens(totalMonth) + " tokens",
             style_class: "dpi-card-metric",
@@ -1884,7 +1909,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             for (let proj of topProjects.slice(0, 3)) {
                 let pName = typeof proj === "string" ? proj : (proj.name || proj.project || "Projeto");
                 let pTok = typeof proj === "object" ? (proj.tokens || proj.total_tokens || 0) : 0;
-                let row = new St.BoxLayout({ spacing: 6 });
+                let row = new St.BoxLayout({ style: "spacing: 6px;" });
                 let nl = new St.Label({ text: pName, style_class: "dpi-subtitle", x_expand: true });
                 nl.clutter_text.ellipsize = Pango.EllipsizeMode.END;
                 row.add_child(nl);
@@ -2137,7 +2162,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _makeActionButton(iconName, label, variant, onClick) {
         let content = new St.BoxLayout({
-            spacing: 5,
+            style: "spacing: 5px;",
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });

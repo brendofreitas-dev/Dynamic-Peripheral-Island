@@ -41,12 +41,29 @@ Regras inegociáveis para qualquer alteração em `K500KeyboardDriver`:
 | **Hardware Drivers** | `src/dpi_core/hardware.py`, `udev/99-dynamic-peripheral-island.rules` | Comunicação HID/ALSA/evdev/Bluetooth/sysfs e regras de permissão `udev`. Não conhece UI nem Antigravity. |
 | **Antigravity & CLI** | `src/dpi_core/antigravity.py`, `src/dpi_core/cli.py`, `bin/dpi-hub` | Descoberta do daemon LanguageServer, ConnectRPC, parsing incremental de transcripts, persistência de `settings.json` e saída JSON/Waybar/Terminal. |
 | **Island UI (CJS)** | `applet/dynamic-peripheral-island@brendo/*`, `install.sh`, `uninstall.sh` | Cápsula unificada na TopBar do Cinnamon, Popover Bento Grid, animações (`actor.ease`), tema adaptativo e instaladores. |
-| **Design System & Docs** | `design-system/*`, `README.md`, `CHANGELOG.md`, `PRODUCTLOG.md`, `ROADMAP.md`, `AGENTS.md`, `docs/ARCHITECTURE.md` | Tokens DTCG/CSS, especificações visuais, documentação técnica e registro de decisões. |
+| **Design System** | `design-system/*` | Tokens DTCG/CSS (`MASTER.md`, `tokens.json`, `tokens.css`) e diretrizes visuais UI/UX Pro Max. |
+| **Documentação & Git** | `.agents/agents/docs-git.md`, `README.md`, `CHANGELOG.md`, `PRODUCTLOG.md`, `ROADMAP.md`, `AGENTS.md`, `docs/ARCHITECTURE.md` | Documentação contínua, governança de agentes, incidentes e gestão de commits semânticos no Git. |
 | **Qualidade & Verificação** | `tests/test_*.py` | Suíte `unittest` com mocks determinísticos de hardware, rede e sistema de arquivos. |
 
 ---
 
-## 4. Exigência de Testes Antes de Releases
+## 4. Topologia do Swarm e Governança de Agentes
+
+Por solicitação direta do usuário, todos os agentes do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), garantindo execução ultra-rápida, conformidade de contratos e governança determinística.
+
+| Agente | Modelo Ativo | Papel e Escopo de Atuação |
+| :--- | :--- | :--- |
+| `coordinator` | `gemini-flash-worker-agy` | Orquestração do Swarm, planejamento de alto nível e despacho de tarefas. |
+| `hw-engine` | `Gemini 3.8 Flash (High)` | Drivers de hardware Python stdlib (`src/dpi_core/hardware.py`), regras `udev` e comunicação HID/ALSA/evdev. |
+| `ag-engine` | `Gemini 3.8 Flash (High)` | Coletor ConnectRPC Antigravity (`src/dpi_core/antigravity.py`), CLI `dpi-hub` (`src/dpi_core/cli.py`). |
+| `island-ui` | `Gemini 3.8 Flash (High)` | Applet Cinnamon CJS (`applet.js`, `stylesheet.css`, `metadata.json`), tema e interações da TopBar. |
+| `design-docs` | `Gemini 3.8 Flash (High)` | Design System (`MASTER.md`, tokens DTCG), arquitetura visual e especificações de interface. |
+| `test-verifier` | `Gemini 3.8 Flash (High)` | Testes automatizados (`tests/`), auditoria de integridade e validação em runtime no Cinnamon. |
+| `docs-git` | `Gemini 3.8 Flash (High)` | Governança de documentação técnica (`.agents/agents/docs-git.md`, `README.md`, `CHANGELOG.md`, `PRODUCTLOG.md`, `ROADMAP.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`) e commits semânticos no Git. |
+
+---
+
+## 5. Exigência de Testes Antes de Releases
 
 Nenhuma release, tag ou merge para a branch principal é permitida sem que:
 1. Todos os arquivos Python passem em `python3 -m py_compile`.

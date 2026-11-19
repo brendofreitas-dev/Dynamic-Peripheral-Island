@@ -5,6 +5,25 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.2] - 2026-11-19
+
+### Corrigido
+- **BUG-002 (Clique no Antigravity & Fonte do Sistema no Applet Cinnamon)**:
+  - Corrigido o evento de clique nos segmentos da TopBar (`applet/dynamic-peripheral-island@brendo/applet.js`): migrado de `button-release-event` para `button-press-event` em `_segPeripherals`, `_segAntigravity` e `_morphPill` com retorno `Clutter.EVENT_STOP` no botão 1, eliminando o conflito com a interceptação antecipada por `on_applet_clicked`.
+  - Adicionada verificação defensiva de origem (`event.get_source()`) em `on_applet_clicked` para rotear diretamente para as abas `"antigravity"` ou `"peripherals"` se o evento atingir os respectivos containers.
+  - Removidos todos os overrides `font-family: Monospace;` e `font-family: Sans;` de `stylesheet.css`, garantindo que o applet herde de forma estável a fonte configurada no sistema operacional (`Lexend 10`), sem alternâncias indesejadas de família tipográfica ao interagir com a interface.
+
+### Alterado
+- **UX-001 (Estética da TopBar & Hover Nativo SystemTray)**:
+  - Removido o container de fundo azul escuro (`rgba(15, 23, 42, 0.84)`) e `border-radius: 999px` de `.dpi-unified-capsule` e `.dpi-capsule-segment`.
+  - Aplicada a classe CSS nativa Cinnamon `.applet-box` em cada segmento clicável da cápsula com `border-radius: 6px` e chamada `this.actor.remove_style_class_name("applet-box")` no ator raiz do applet para prevenir borda externa duplicada.
+  - Removidas as regras customizadas de hover azul/slate, delegando ao seletor nativo `.applet-box:hover` do tema ativo do Cinnamon o controle da cor e da transparência de hover, mantendo a geometria retangular com cantos arredondados de `6px` idêntica aos ícones da bandeja do sistema (`systray@cinnamon.org`).
+  - Atualizados os seletores de segmento ativo e destaques secundários para tons neutros e violeta suave (`rgba(189, 147, 249, 0.35)` no modo escuro e `rgba(0, 0, 0, 0.12)` no modo claro).
+
+### Governança
+- **Migração do Swarm para Gemini 3.8 Flash (High)**: Todos os workers do Swarm (`island-ui`, `test-verifier`, `hw-engine`, `ag-engine`, `design-docs`, `docs-git`) migrados para `Gemini 3.8 Flash (High)` por solicitação do usuário.
+- **Agente `docs-git`**: Criação formal do agente responsável por documentação contínua, governança e Conventional Commits (`.agents/agents/docs-git.md`).
+
 ## [1.0.1] - 2026-11-19
 
 ### Corrigido

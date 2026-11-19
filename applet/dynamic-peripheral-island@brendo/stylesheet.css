@@ -7,69 +7,65 @@
 /* --- Unified TopBar Capsule (applied to panel._centerBox) --- */
 
 .dpi-unified-capsule {
-    border-radius: 999px;
-    padding: 0 8px;
-    margin: 2px 0;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 6px;
+    padding: 0;
+    margin: 0;
     spacing: 2px;
-    border-width: 1px;
     transition-duration: 180ms;
 }
 
 .dpi-unified-capsule.dpi-theme-dark {
-    background-color: rgba(15, 23, 42, 0.84);
-    border-color: rgba(148, 163, 184, 0.24);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
     color: #F8FAFC;
 }
 
 .dpi-unified-capsule.dpi-theme-light {
-    background-color: rgba(248, 250, 252, 0.88);
-    border-color: rgba(15, 23, 42, 0.16);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
     color: #0F172A;
 }
 
 /* Fallback when applet is placed outside panel._centerBox */
 .dpi-standalone-capsule {
-    border-radius: 999px;
-    padding: 0 8px;
-    margin: 2px 4px;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 6px;
+    padding: 0;
+    margin: 0;
     spacing: 4px;
-    border-width: 1px;
     transition-duration: 180ms;
 }
 
 .dpi-standalone-capsule.dpi-theme-dark {
-    background-color: rgba(15, 23, 42, 0.84);
-    border-color: rgba(148, 163, 184, 0.24);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
     color: #F8FAFC;
 }
 
 .dpi-standalone-capsule.dpi-theme-light {
-    background-color: rgba(248, 250, 252, 0.88);
-    border-color: rgba(15, 23, 42, 0.16);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
     color: #0F172A;
 }
 
 /* Harmonized native Cinnamon calendar@cinnamon.org sibling inside capsule */
 .dpi-capsule-clock {
+    border-radius: 6px;
+    padding: 0 6px;
+    margin: 2px 1px;
     background-color: transparent;
     border: none;
     box-shadow: none;
-    border-radius: 999px;
-    padding: 0 8px;
-    margin: 2px 0;
     transition-duration: 160ms;
-}
-
-.dpi-unified-capsule.dpi-theme-dark .dpi-capsule-clock:hover {
-    background-color: rgba(51, 65, 85, 0.55);
-}
-
-.dpi-unified-capsule.dpi-theme-light .dpi-capsule-clock:hover {
-    background-color: rgba(226, 232, 240, 0.75);
 }
 
 /* Root container of our applet inside the capsule */
@@ -99,31 +95,26 @@
 
 /* Clickable segments inside the TopBar capsule */
 .dpi-capsule-segment {
-    border-radius: 999px;
-    padding: 2px 8px;
-    margin: 2px 0;
+    border-radius: 6px;
+    padding: 0 6px;
+    margin: 2px 1px;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
     spacing: 7px;
     transition-duration: 160ms;
 }
 
-.dpi-theme-dark .dpi-capsule-segment:hover,
-.dpi-theme-dark .dpi-capsule-segment:focus {
-    background-color: rgba(51, 65, 85, 0.65);
-}
-
-.dpi-theme-light .dpi-capsule-segment:hover,
-.dpi-theme-light .dpi-capsule-segment:focus {
-    background-color: rgba(226, 232, 240, 0.82);
-}
-
 .dpi-capsule-segment-active.dpi-theme-dark,
 .dpi-theme-dark .dpi-capsule-segment-active {
-    background-color: rgba(59, 130, 246, 0.25);
+    border-radius: 6px;
+    background-color: rgba(189, 147, 249, 0.35);
 }
 
 .dpi-capsule-segment-active.dpi-theme-light,
 .dpi-theme-light .dpi-capsule-segment-active {
-    background-color: rgba(59, 130, 246, 0.16);
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.12);
 }
 
 .dpi-pill-item {
@@ -135,9 +126,8 @@
 }
 
 .dpi-pill-text {
-    font-family: Monospace;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: bold;
 }
 
 .dpi-theme-dark .dpi-pill-text {
@@ -169,7 +159,11 @@
 }
 
 .dpi-pill-text-info {
-    color: #3B82F6;
+    color: #f8f8f2;
+}
+
+.dpi-theme-light .dpi-pill-text-info {
+    color: #0F172A;
 }
 
 .dpi-pill-text-purple {
@@ -188,7 +182,7 @@
 }
 
 .dpi-dot-info {
-    background-color: #3B82F6;
+    background-color: #94A3B8;
 }
 
 .dpi-dot-warn {
@@ -219,9 +213,9 @@
 }
 
 .dpi-morph-info {
-    background-color: rgba(59, 130, 246, 0.24);
-    border-color: rgba(59, 130, 246, 0.55);
-    color: #93C5FD;
+    background-color: rgba(148, 163, 184, 0.24);
+    border-color: rgba(148, 163, 184, 0.55);
+    color: #E2E8F0;
 }
 
 .dpi-morph-ok {
@@ -249,8 +243,8 @@
 }
 
 .dpi-theme-light .dpi-morph-info {
-    background-color: rgba(59, 130, 246, 0.14);
-    color: #1D4ED8;
+    background-color: rgba(148, 163, 184, 0.16);
+    color: #1E293B;
 }
 
 .dpi-theme-light .dpi-morph-ok {
@@ -274,7 +268,6 @@
 }
 
 .dpi-morph-text {
-    font-family: Sans;
     font-size: 11px;
     font-weight: 600;
 }
@@ -289,7 +282,6 @@
     spacing: 10px;
     border-radius: 16px;
     border-width: 1px;
-    font-family: Sans;
 }
 
 .dpi-popover-root.dpi-theme-dark {
@@ -312,7 +304,6 @@
 }
 
 .dpi-title {
-    font-family: Monospace;
     font-size: 13px;
     font-weight: 700;
 }
@@ -400,10 +391,11 @@
 }
 
 .dpi-theme-dark .dpi-tab-btn-active {
-    background-color: rgba(59, 130, 246, 0.24);
+    background-color: rgba(189, 147, 249, 0.24);
     color: #F8FAFC;
     border-width: 1px;
-    border-color: rgba(59, 130, 246, 0.55);
+    border-color: rgba(189, 147, 249, 0.55);
+    border-radius: 6px;
 }
 
 .dpi-theme-light .dpi-tab-btn {
@@ -420,8 +412,9 @@
     background-color: #FFFFFF;
     color: #0F172A;
     border-width: 1px;
-    border-color: rgba(59, 130, 246, 0.45);
+    border-color: rgba(189, 147, 249, 0.45);
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    border-radius: 6px;
 }
 
 /* Scroll View */
@@ -456,9 +449,10 @@
 }
 
 .dpi-toast-info {
-    background-color: rgba(59, 130, 246, 0.16);
-    border-color: rgba(59, 130, 246, 0.45);
-    color: #60A5FA;
+    background-color: rgba(148, 163, 184, 0.22);
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #E2E8F0;
+    border-radius: 6px;
 }
 
 .dpi-theme-light .dpi-toast-ok {
@@ -470,7 +464,7 @@
 }
 
 .dpi-theme-light .dpi-toast-info {
-    color: #1D4ED8;
+    color: #1E293B;
 }
 
 /* Bento Cards */
@@ -516,7 +510,6 @@
 }
 
 .dpi-card-metric {
-    font-family: Monospace;
     font-size: 12.5px;
     font-weight: 700;
 }
@@ -537,7 +530,6 @@
 }
 
 .dpi-section-label {
-    font-family: Monospace;
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.6px;
@@ -555,7 +547,6 @@
 .dpi-badge {
     border-radius: 999px;
     padding: 2px 7px;
-    font-family: Monospace;
     font-size: 10px;
     font-weight: 600;
     border-width: 1px;
@@ -568,9 +559,10 @@
 }
 
 .dpi-badge-info {
-    background-color: rgba(59, 130, 246, 0.16);
-    border-color: rgba(59, 130, 246, 0.45);
-    color: #60A5FA;
+    background-color: rgba(148, 163, 184, 0.22);
+    border-color: rgba(148, 163, 184, 0.45);
+    color: #E2E8F0;
+    border-radius: 6px;
 }
 
 .dpi-badge-warn {
@@ -608,7 +600,7 @@
 }
 
 .dpi-theme-light .dpi-badge-info {
-    color: #1D4ED8;
+    color: #334155;
 }
 
 .dpi-theme-light .dpi-badge-warn {
@@ -656,7 +648,7 @@
 }
 
 .dpi-fill-info {
-    background-color: #3B82F6;
+    background-color: #94A3B8;
 }
 
 .dpi-fill-warn {
@@ -695,7 +687,6 @@
 .dpi-chip {
     border-radius: 7px;
     padding: 4px 8px;
-    font-family: Monospace;
     font-size: 10.5px;
     font-weight: 600;
     border-width: 1px;
@@ -827,7 +818,6 @@
 .dpi-kbd-badge {
     border-radius: 6px;
     padding: 2px 7px;
-    font-family: Monospace;
     font-size: 10px;
     font-weight: 700;
     border-width: 1px;
@@ -846,15 +836,15 @@
 }
 
 .dpi-kbd-badge-on {
-    background-color: rgba(59, 130, 246, 0.24);
-    border-color: #3B82F6;
-    color: #60A5FA;
+    background-color: rgba(189, 147, 249, 0.24);
+    border-color: #A855F7;
+    color: #D8B4FE;
 }
 
 .dpi-theme-light .dpi-kbd-badge-on {
-    background-color: rgba(59, 130, 246, 0.16);
-    border-color: #2563EB;
-    color: #1D4ED8;
+    background-color: rgba(189, 147, 249, 0.16);
+    border-color: #9333EA;
+    color: #7E22CE;
 }
 
 .dpi-shortcut-row {
@@ -865,7 +855,6 @@
 .dpi-kbd-key {
     border-radius: 5px;
     padding: 2px 6px;
-    font-family: Monospace;
     font-size: 10px;
     font-weight: 600;
     border-width: 1px;
@@ -893,12 +882,12 @@
 
 .dpi-theme-dark .dpi-hero-box {
     background-color: rgba(30, 41, 59, 0.88);
-    border-color: rgba(59, 130, 246, 0.35);
+    border-color: rgba(189, 147, 249, 0.35);
 }
 
 .dpi-theme-light .dpi-hero-box {
     background-color: rgba(239, 246, 255, 0.90);
-    border-color: rgba(59, 130, 246, 0.30);
+    border-color: rgba(189, 147, 249, 0.30);
 }
 
 .dpi-pin-btn {
@@ -947,7 +936,6 @@
 }
 
 .dpi-metric-value {
-    font-family: Monospace;
     font-size: 12px;
     font-weight: 700;
 }
@@ -994,7 +982,7 @@
 .dpi-hist-bar {
     width: 18px;
     border-radius: 5px;
-    background-color: #3B82F6;
+    background-color: #94A3B8;
 }
 
 .dpi-hist-bar-today {
@@ -1002,7 +990,6 @@
 }
 
 .dpi-hist-label {
-    font-family: Monospace;
     font-size: 9.5px;
 }
 
@@ -1015,7 +1002,6 @@
 .dpi-toggle {
     border-radius: 999px;
     padding: 3px 10px;
-    font-family: Monospace;
     font-size: 10px;
     font-weight: 700;
     border-width: 1px;

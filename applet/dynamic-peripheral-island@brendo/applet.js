@@ -123,6 +123,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._orientation = orientation;
 
         this.setAllowedLayout(Applet.AllowedLayout.HORIZONTAL);
+        this.actor.remove_style_class_name("applet-box");
         this.actor.add_style_class_name("dpi-applet-box");
 
         // Runtime state
@@ -282,16 +283,18 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Peripherals Segment
         this._segPeripherals = new St.BoxLayout({
-            style_class: "dpi-capsule-segment",
+            style_class: "applet-box dpi-capsule-segment",
             reactive: true,
             can_focus: true,
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._segPeripherals.connect("button-release-event", (actor, event) => {
-            if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
-            this._openTabFromSegment("peripherals");
-            return Clutter.EVENT_STOP;
+        this._segPeripherals.connect("button-press-event", (actor, event) => {
+            if (event.get_button() === 1) {
+                this._openTabFromSegment("peripherals");
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
         this.actor.add_child(this._segPeripherals);
 
@@ -302,16 +305,18 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Antigravity Segment
         this._segAntigravity = new St.BoxLayout({
-            style_class: "dpi-capsule-segment",
+            style_class: "applet-box dpi-capsule-segment",
             reactive: true,
             can_focus: true,
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._segAntigravity.connect("button-release-event", (actor, event) => {
-            if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
-            this._openTabFromSegment("antigravity");
-            return Clutter.EVENT_STOP;
+        this._segAntigravity.connect("button-press-event", (actor, event) => {
+            if (event.get_button() === 1) {
+                this._openTabFromSegment("antigravity");
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
         this.actor.add_child(this._segAntigravity);
 
@@ -337,11 +342,13 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._morphPill.opacity = 0;
         this._morphPill.hide();
         this._morphAlertTab = "peripherals";
-        this._morphPill.connect("button-release-event", (actor, event) => {
-            if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
-            this._dismissMorphAlert();
-            this._openTabFromSegment(this._morphAlertTab);
-            return Clutter.EVENT_STOP;
+        this._morphPill.connect("button-press-event", (actor, event) => {
+            if (event.get_button() === 1) {
+                this._dismissMorphAlert();
+                this._openTabFromSegment(this._morphAlertTab);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
         this.actor.add_child(this._morphPill);
 
@@ -376,7 +383,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             item.add_child(dot);
         }
         if (text !== null && text !== undefined && text !== "") {
-            let textClass = "dpi-pill-text";
+            let textClass = "applet-label dpi-pill-text";
             if (tone && tone !== "default") {
                 textClass += " dpi-pill-text-" + tone;
             }
@@ -511,8 +518,15 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
     }
 
-    on_applet_clicked() {
-        this._toggleIsland();
+    on_applet_clicked(event) {
+        let src = event ? event.get_source() : null;
+        if (src && this._segAntigravity && this._segAntigravity.contains(src)) {
+            this._openTabFromSegment("antigravity");
+        } else if (src && this._segPeripherals && this._segPeripherals.contains(src)) {
+            this._openTabFromSegment("peripherals");
+        } else {
+            this._toggleIsland();
+        }
     }
 
     _openTabFromSegment(tabName) {

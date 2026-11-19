@@ -33,6 +33,21 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
 | `design-docs` | Gemini 4 Hydrogen (Medium) | Tokens UI/UX Pro Max (`MASTER.md`, `tokens.json`, `tokens.css`), governança e documentação técnica. |
 | `test-verifier` | Gemini 4 Hydrogen (High) | Suíte `unittest` (`tests/test_*.py`), auditoria cruzada, instalação runtime e commit inicial. |
 
+### 2.1. Evolução do Swarm na v1.0.2 e Agente `docs-git`
+
+Por solicitação direta do usuário, todos os agentes do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), alcançando tempos de resposta inferiores a 1s e integração fluida.
+Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/docs-git.md`) para centralizar a governança da documentação técnica contínua, auditoria de integridade e geração de commits semânticos no Git (Conventional Commits).
+
+| Agente | Modelo Ativo | Papel Atualizado |
+| :--- | :--- | :--- |
+| `coordinator` | `gemini-flash-worker-agy` | Orquestração do Swarm e alinhamento de entregáveis. |
+| `hw-engine` | `Gemini 3.8 Flash (High)` | Drivers de hardware Python stdlib (`src/dpi_core/hardware.py`). |
+| `ag-engine` | `Gemini 3.8 Flash (High)` | Coletor Antigravity ConnectRPC e CLI (`src/dpi_core/antigravity.py`, `cli.py`). |
+| `island-ui` | `Gemini 3.8 Flash (High)` | Applet Cinnamon CJS (`applet.js`, `stylesheet.css`, `metadata.json`). |
+| `design-docs` | `Gemini 3.8 Flash (High)` | Design System (`MASTER.md`, tokens DTCG) e arquitetura visual. |
+| `test-verifier` | `Gemini 3.8 Flash (High)` | Testes automatizados (`tests/test_*.py`) e validação em runtime. |
+| `docs-git` | `Gemini 3.8 Flash (High)` | Governança de documentação técnica, histórico de produto e Conventional Commits. |
+
 ---
 
 ## 3. Análise de Riscos de Hardware e Mitigações
@@ -77,6 +92,28 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
   - Atualização do card do mouse no `applet.js` para combinar `mouse.dpi_stages` do backend com os presets extras.
 - **Restauração do Perfil do Usuário**: Perfil restaurado no hardware real (`/dev/hidraw4`) com estágios `[400, 950, 1200, 1600, 2400, 3200]`, estágio ativo `2` (**1200 DPI**), polling rate `250 Hz`, LOD `2mm` e sleep `300s`.
 - **Nova Regra Preventiva**: Formalizada em `AGENTS.md` a proibição absoluta de enviar opcodes de escrita (`0x02..0x09`) em rotinas de leitura (`read_state()`), com cobertura obrigatória por teste de regressão em `tests/test_hardware.py`.
+
+### `UX-001` — Fundo Azul Artificial e Hover Não-Nativo na TopBar do Cinnamon (`2026-11-19`)
+- **Severidade**: Média (inconsistência estética e quebra da integração visual com a barra do Cinnamon).
+- **Causa Raiz**:
+  - A cápsula da TopBar estava renderizada como um bloco estático de pílula azul (`.dpi-unified-capsule` com `background-color: rgba(15, 23, 42, 0.84)` e `border-radius: 999px`).
+  - O hover era forçado via regras CSS customizadas (`.dpi-capsule-segment:hover`) que aplicavam fundo azul translúcido, destoando do comportamento e da estética dos ícones nativos da área de notificação do Cinnamon (`systray@cinnamon.org`).
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: remoção da classe `applet-box` do container raiz (`this.actor.remove_style_class_name("applet-box")`) e aplicação direta de `applet-box` em cada segmento clicável (`_segPeripherals` e `_segAntigravity`).
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: remoção do fundo azul e de `border-radius: 999px` em `.dpi-unified-capsule` / `.dpi-capsule-segment`, adoção de `border-radius: 6px` com fundo transparente, remoção das regras customizadas de hover (permitindo que o `.applet-box:hover` nativo do tema do usuário dite a cor exata de hover), e suavização do estado ativo (`.dpi-capsule-segment-active`) para tons neutros e violeta.
+  - `tests/test_cli_and_applet.py`: asserções automatizadas validando a presença de `remove_style_class_name("applet-box")`, o uso de `applet-box` nos segmentos, e a ausência do fundo azul `rgba(15, 23, 42, 0.84)` e `border-radius: 999px`.
+- **Validação**: Aprovado nos testes unitários e confirmado visualmente no Cinnamon Desktop com hover retangular de cantos arredondados (`6px`), perfeitamente integrado ao SystemTray nativo.
+
+### `BUG-002` — Conflito de Evento no Clique do Segmento Antigravity e Alternância de Fonte (`2026-11-19`)
+- **Severidade**: Média (falha ao abrir a aba correspondente no Popover e oscilação tipográfica).
+- **Causa Raiz**:
+  1. Conflito de ciclo de eventos no Clutter/CJS: a classe base `Applet.Applet` do Cinnamon conecta `this.actor` ao sinal `button-press-event` chamando `on_applet_clicked()`. Como os segmentos internos (`_segAntigravity` e `_segPeripherals`) conectavam-se ao `button-release-event`, o clique pressionado disparava a ação padrão da ilha antes da liberação do mouse, abrindo a aba padrão de periféricos em vez da aba de telemetria do Antigravity.
+  2. Declarações forçadas de `font-family: Monospace;` e `font-family: Sans;` no `stylesheet.css` sobrescreviam a fonte padrão do sistema do usuário (`Lexend 10`), gerando uma troca visível de fonte entre os estados de repouso e interação no applet.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: migração de `button-release-event` para `button-press-event` em `_segPeripherals`, `_segAntigravity` e `_morphPill`, retornando `Clutter.EVENT_STOP` no botão 1 (esquerdo) para interromper a propagação até o ator pai; guarda defensiva adicional em `on_applet_clicked(event)` inspecionando `event.get_source()` para abrir a aba correta se o evento atingir os nós dos segmentos.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: remoção total de declarações `font-family`, padronizando o uso de classes `applet-label dpi-pill-text` e `font-weight: bold;` para herdar integralmente a tipografia nativa do Cinnamon (`Lexend 10`).
+  - `tests/test_cli_and_applet.py`: testes unitários garantindo conexão exclusiva a `button-press-event` nos segmentos e ausência de declarações `font-family:` no CSS.
+- **Validação**: Suíte completa de 30 testes aprovada, reload do applet sem nenhum `JS ERROR` ou `St-WARNING` em `~/.xsession-errors`, e verificação de clique no segmento Antigravity abrindo diretamente a aba correspondente sem qualquer oscilação de fonte.
 
 ---
 

@@ -343,8 +343,16 @@ class TestAppletCssAndDocs(unittest.TestCase):
             "dpi-unified-capsule",
             "org.cinnamon.desktop.interface",
             "_prewarmPopover",
+            'this.actor.remove_style_class_name("applet-box")',
+            'style_class: "applet-box dpi-capsule-segment"',
         ):
             self.assertIn(token, src)
+
+        # Segments must use button-press-event (not button-release-event) to precede on_applet_clicked
+        self.assertIn('this._segPeripherals.connect("button-press-event"', src)
+        self.assertIn('this._segAntigravity.connect("button-press-event"', src)
+        self.assertNotIn('this._segPeripherals.connect("button-release-event"', src)
+        self.assertNotIn('this._segAntigravity.connect("button-release-event"', src)
 
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
@@ -381,11 +389,23 @@ class TestAppletCssAndDocs(unittest.TestCase):
         ):
             self.assertIn(required_cls, css)
 
-        # Cinnamon St CSS parser only supports single font-family names (Monospace / Sans)
+        # Zero font-family overrides (inherits system font, e.g. Lexend 10)
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)
-        self.assertGreater(len(font_families), 0)
-        for fam in font_families:
-            self.assertIn(fam.strip(), {"Monospace", "Sans"}, msg=f"St-incompatible font-family: {fam!r}")
+        self.assertEqual(len(font_families), 0, msg=f"stylesheet.css should not override font-family: {font_families}")
+
+        # No blue pill background rgba(15, 23, 42, 0.84) in CSS
+        self.assertNotIn("rgba(15, 23, 42, 0.84)", css)
+
+        # Check .dpi-unified-capsule and .dpi-capsule-segment use border-radius: 6px (no 999px pill)
+        capsule_match = re.search(r"\.dpi-unified-capsule\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(capsule_match)
+        self.assertIn("border-radius: 6px;", capsule_match.group(1))
+        self.assertNotIn("999px", capsule_match.group(1))
+
+        segment_match = re.search(r"\.dpi-capsule-segment\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(segment_match)
+        self.assertIn("border-radius: 6px;", segment_match.group(1))
+        self.assertNotIn("999px", segment_match.group(1))
 
         emoji_re = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
         self.assertIsNone(emoji_re.search(css), msg="stylesheet.css must not contain structural emojis")

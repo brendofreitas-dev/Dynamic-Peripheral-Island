@@ -116,7 +116,14 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
 
     low_battery = isinstance(battery, (int, float)) and connected and battery <= threshold
     critical_battery = isinstance(battery, (int, float)) and connected and battery <= 10
-    visible = pinned or (key == "gamepad" and active) or low_battery
+    if key == "headset":
+        visible = pinned or low_battery or (
+            connected and (isinstance(battery, (int, float)) or conn_type == "Bluetooth")
+        )
+    elif key == "gamepad":
+        visible = pinned or active or charging or low_battery
+    else:
+        visible = pinned or low_battery
 
     if not connected:
         status_text = "Off"
@@ -125,13 +132,13 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         bat_str = f"{int(battery)}%" if isinstance(battery, (int, float)) else "--"
         if dev.get("standby"):
             bat_str = f"{bat_str} (Sleep)" if isinstance(battery, (int, float)) else "Standby"
-        status_text = f"⚡ {bat_str}" if charging else bat_str
+        status_text = f"{int(battery)}%+" if (charging and isinstance(battery, (int, float))) else bat_str
         dpi = dev.get("current_dpi") or "--"
         hz = dev.get("polling_rate") or "--"
         detail_text = f"{dpi} DPI · {hz}Hz"
     elif key == "headset":
         bat_str = f"{int(battery)}%" if isinstance(battery, (int, float)) else conn_type
-        status_text = f"⚡ {bat_str}" if charging else bat_str
+        status_text = f"{int(battery)}%+" if (charging and isinstance(battery, (int, float))) else bat_str
         vol = dev.get("volume")
         muted = dev.get("muted", False)
         vol_str = "Mudo" if muted else (f"{int(vol)}%" if isinstance(vol, (int, float)) else "--")
@@ -143,9 +150,9 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         bat = first.get("battery", battery)
         is_chg = bool(first.get("charging", charging))
         if isinstance(bat, (int, float)):
-            status_text = f"⚡ {int(bat)}%" if is_chg else f"{int(bat)}%"
+            status_text = f"{int(bat)}%+" if is_chg else f"{int(bat)}%"
         else:
-            status_text = "⚡ USB" if is_chg else ("Ativo" if active else "Standby")
+            status_text = "USB+" if is_chg else ("Ativo" if active else "Standby")
         detail_text = str(first.get("name") or dev.get("name") or conn_type)
     else:  # keyboard
         leds = dev.get("leds") or {}
@@ -262,16 +269,16 @@ def format_waybar(payload: Dict[str, Any]) -> str:
     """Format unified payload as single-line JSON for Waybar custom modules."""
     capsule = payload.get("capsule") or {}
     peripherals = [p for p in (capsule.get("peripherals") or []) if p.get("visible") and p.get("connected")]
-    icons = {"mouse": "🖱", "headset": "🎧", "gamepad": "🎮", "keyboard": "⌨"}
+    labels = {"mouse": "Mouse", "headset": "Headset", "gamepad": "Ctrl", "keyboard": "K500"}
 
-    parts = [f"{icons.get(p['key'], '•')} {p['status_text']}" for p in peripherals]
+    parts = [f"{labels.get(p['key'], p.get('short_name', 'Dev'))} {p['status_text']}" for p in peripherals]
     ag_cap = capsule.get("antigravity") or {}
     if ag_cap.get("connected"):
         swarm_n = int(ag_cap.get("swarm_active", 0))
-        swarm_tag = f" 🐝{swarm_n}" if swarm_n > 0 else ""
-        parts.append(f"🤖 {ag_cap.get('label', 'AG')}{swarm_tag}")
+        swarm_tag = f" [Swarm {swarm_n}]" if swarm_n > 0 else ""
+        parts.append(f"AG {ag_cap.get('label', 'OK')}{swarm_tag}")
     else:
-        parts.append("🤖 Offline")
+        parts.append("AG Offline")
 
     text = "  ".join(parts) if parts else "DPI Hub"
 

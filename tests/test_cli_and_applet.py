@@ -126,7 +126,7 @@ def _mock_ag_collector() -> mock.MagicMock:
                 "reset_countdown": "4h 6m",
                 "window": "5h",
                 "pace_pct": 18.0,
-                "depletion_eta": "⚡ ~3.8h",
+                "depletion_eta": "~3.8h",
                 "models": ["Gemini 4 Neon (High)"],
             },
             {
@@ -155,7 +155,7 @@ def _mock_ag_collector() -> mock.MagicMock:
             "reset_countdown": "4h 6m",
             "window": "5h",
             "pace_pct": 18.0,
-            "depletion_eta": "⚡ ~3.8h",
+            "depletion_eta": "~3.8h",
             "models": ["Gemini 4 Neon (High)"],
         },
         "swarm": {
@@ -351,6 +351,10 @@ class TestAppletCssAndDocs(unittest.TestCase):
             proc = subprocess.run([node_bin, "--check", str(applet_js)], capture_output=True, text=True, check=False)
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
 
+        # Zero structural emojis in applet.js
+        emoji_re = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+        self.assertIsNone(emoji_re.search(src), msg="applet.js must not contain structural emojis")
+
     def test_stylesheet_css_dark_light_classes_and_braces(self) -> None:
         css_path = ROOT_DIR / "applet" / "dynamic-peripheral-island@brendo" / "stylesheet.css"
         self.assertTrue(css_path.is_file())
@@ -366,6 +370,49 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-pace-marker",
         ):
             self.assertIn(required_cls, css)
+
+        # Cinnamon St CSS parser only supports single font-family names (Monospace / Sans)
+        font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)
+        self.assertGreater(len(font_families), 0)
+        for fam in font_families:
+            self.assertIn(fam.strip(), {"Monospace", "Sans"}, msg=f"St-incompatible font-family: {fam!r}")
+
+        emoji_re = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+        self.assertIsNone(emoji_re.search(css), msg="stylesheet.css must not contain structural emojis")
+
+    def test_zero_structural_emojis_in_cli_outputs_and_auto_visibility(self) -> None:
+        emoji_re = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+        hw = _mock_hw_manager()
+        # Simulate charging gamepad (not active) and Bluetooth headset (not pinned)
+        hw.get_all_peripherals_snapshot.return_value["devices"]["headset"]["charging"] = True
+        hw.get_all_peripherals_snapshot.return_value["devices"]["gamepad"]["active"] = False
+        hw.get_all_peripherals_snapshot.return_value["devices"]["gamepad"]["charging"] = True
+        hw.get_all_peripherals_snapshot.return_value["devices"]["gamepad"]["controllers"][0]["active"] = False
+        hw.get_all_peripherals_snapshot.return_value["devices"]["gamepad"]["controllers"][0]["charging"] = True
+
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "settings.json"
+            for flag in ("--island-json", "--waybar", "--pretty"):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    rc = cli.main(
+                        argv=[flag],
+                        hw_manager=hw,
+                        ag_collector=_mock_ag_collector(),
+                        settings_path=settings_path,
+                    )
+                self.assertEqual(rc, 0)
+                out = buf.getvalue()
+                self.assertIsNone(
+                    emoji_re.search(out),
+                    msg=f"Structural emoji found in {flag} output: {out!r}",
+                )
+                if flag == "--island-json":
+                    data = json.loads(out)
+                    by_key = {p["key"]: p for p in data["capsule"]["peripherals"]}
+                    self.assertTrue(by_key["headset"]["visible"])
+                    self.assertTrue(by_key["gamepad"]["visible"])
+                    self.assertTrue(by_key["headset"]["status_text"].endswith("+"))
 
     def test_install_and_uninstall_scripts_syntax(self) -> None:
         for script_name in ("install.sh", "uninstall.sh"):

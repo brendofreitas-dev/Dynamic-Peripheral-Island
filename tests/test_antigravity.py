@@ -190,7 +190,8 @@ class TestAntigravityCollector(unittest.TestCase):
         self.assertEqual(neon["pace_pct"], 60.0)
         self.assertEqual(neon["reset_countdown"], "2h 0m")
         self.assertIsNotNone(neon["depletion_eta"])
-        self.assertTrue(neon["depletion_eta"].startswith("⚡ ~"))
+        self.assertTrue(neon["depletion_eta"].startswith("~"))
+        self.assertNotIn("⚡", neon["depletion_eta"])
 
         hydrogen = by_id["hydrogen"]
         self.assertIsNone(hydrogen["depletion_eta"])

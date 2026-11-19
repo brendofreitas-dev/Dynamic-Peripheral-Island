@@ -487,11 +487,11 @@ class AntigravityCollector:
                         eta_hours = remaining_pct / burn_rate_per_hour
                         if eta_hours < (delta_sec / 3600.0):
                             if eta_hours >= 24.0:
-                                depletion_eta = f"⚡ ~{eta_hours / 24.0:.1f}d"
+                                depletion_eta = f"~{eta_hours / 24.0:.1f}d"
                             elif eta_hours >= 1.0:
-                                depletion_eta = f"⚡ ~{eta_hours:.1f}h"
+                                depletion_eta = f"~{eta_hours:.1f}h"
                             else:
-                                depletion_eta = f"⚡ ~{max(1, int(round(eta_hours * 60.0)))}m"
+                                depletion_eta = f"~{max(1, int(round(eta_hours * 60.0)))}m"
 
             quotas.append(
                 {

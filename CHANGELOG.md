@@ -5,6 +5,16 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.1] - 2026-11-19
+
+### Corrigido
+- **BUG-001 (`src/dpi_core/hardware.py`)**: Corrigida a queda do AJAZZ AJ179 V2 para **50 DPI** e a falha ao ajustar DPI/LED/Sleep na MCU:
+  - Removido completamente o envio de opcodes de escrita (`0x02..0x09`) durante `AjazzMouseDriver.read_state()`, restringindo o polling estritamente aos opcodes de leitura (`0x10`, `0x12`, `0x13`, `0x14`, `0x17`).
+  - Corrigido `build_packet(..., length_override=...)` e `set_dpi()` para montar o frame real de **25 bytes** (`cmd=0x03`, `buf[3]=0x25`) com os 6 estágios `[lo, hi, lo, hi]` (`raw = dpi // 50`).
+  - Corrigido `set_led_color()` para `cmd=0x04` (`length_override=0x12`, 6×RGB = 18B) e `set_sleep_timeout()` para `cmd=0x07` (`length_override=0x04`), com `fcntl.flock(LOCK_EX)` para evitar corrida com o polling.
+- **UI do Mouse (`applet/dynamic-peripheral-island@brendo/applet.js`)**: `_buildMouseCard` agora combina `mouse.dpi_stages` reais do backend com os presets extras, ordenados e deduplicados, destacando o `current_dpi` ativo.
+- **Testes (`tests/test_hardware.py`)**: Atualizados e adicionados testes de regressão validando os opcodes `0x10..0x17`, o bloqueio de escrita em `read_state()` e o encoding de 25 bytes (`0x03` / `0x25`) em `set_dpi()`.
+
 ## [1.0.0] - 2026-11-19
 
 ### Adicionado

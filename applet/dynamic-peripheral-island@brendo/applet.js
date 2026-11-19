@@ -1232,14 +1232,37 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (expanded) {
             let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", x_expand: true });
 
-            // DPI Presets
+            // DPI Presets (combines hardware dpi_stages with standard presets, sorted & deduplicated)
             let curDpi = Number(mouse.current_dpi) || 0;
+            let dpiSet = {};
+            if (Array.isArray(mouse.dpi_stages) && mouse.dpi_stages.length > 0) {
+                for (let rawStage of mouse.dpi_stages) {
+                    let v = Math.round(Number(rawStage));
+                    if (isFinite(v) && v >= 50 && v <= 26000) {
+                        dpiSet[v] = true;
+                    }
+                }
+            }
+            for (let preset of DPI_PRESETS) {
+                dpiSet[preset] = true;
+            }
+            if (isFinite(curDpi) && curDpi >= 50 && curDpi <= 26000) {
+                dpiSet[Math.round(curDpi)] = true;
+            }
+            let dpiOptions = Object.keys(dpiSet)
+                .map((k) => Number(k))
+                .sort((a, b) => a - b);
+
             body.add_child(this._makeSectionLabel("DPI SENSOR" + (curDpi ? " (" + curDpi + ")" : "")));
-            body.add_child(this._makeChipRow(
-                DPI_PRESETS.map((v) => ({ label: String(v), value: v })),
-                curDpi,
-                (v) => this._dispatchCliAction(["--set-dpi", String(v)], "Aplicando " + v + " DPI...")
-            ));
+            let rowSize = dpiOptions.length <= 6 ? dpiOptions.length : Math.ceil(dpiOptions.length / 2);
+            for (let i = 0; i < dpiOptions.length; i += rowSize) {
+                let slice = dpiOptions.slice(i, i + rowSize);
+                body.add_child(this._makeChipRow(
+                    slice.map((v) => ({ label: String(v), value: v })),
+                    curDpi,
+                    (v) => this._dispatchCliAction(["--set-dpi", String(v)], "Aplicando " + v + " DPI...")
+                ));
+            }
 
             // Polling Rate
             let curPoll = Number(mouse.polling_rate) || 0;

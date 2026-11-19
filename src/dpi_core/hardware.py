@@ -202,13 +202,18 @@ def _scan_power_supply(power_root: Path) -> List[Dict[str, Any]]:
 # Pure protocol & validation functions (testable independently)
 # ---------------------------------------------------------------------------
 
-def build_packet(cmd: int, write: bool = False, payload: bytes = b"") -> bytes:
+def build_packet(
+    cmd: int,
+    write: bool = False,
+    payload: bytes = b"",
+    length_override: Optional[int] = None,
+) -> bytes:
     """Build a 33-byte AJAZZ vendor HID frame (0x00 Report ID + 32-byte payload).
 
     Layout of the 32-byte body `buf`:
       - buf[0] = cmd
       - buf[2] = 0x01 (write) | 0x00 (read)
-      - buf[3] = len(payload)
+      - buf[3] = len(payload) (or length_override & 0xFF when specified)
       - buf[4 : 4 + len(payload)] = payload
       - buf[31] = sum(buf[4:31]) & 0xFF
     """
@@ -219,7 +224,7 @@ def build_packet(cmd: int, write: bool = False, payload: bytes = b"") -> bytes:
     buf = bytearray(32)
     buf[0] = int(cmd) & 0xFF
     buf[2] = 0x01 if write else 0x00
-    buf[3] = len(payload) & 0xFF
+    buf[3] = (len(payload) if length_override is None else int(length_override)) & 0xFF
     if payload:
         buf[4 : 4 + len(payload)] = payload
     buf[31] = sum(buf[4:31]) & 0xFF
@@ -292,14 +297,16 @@ class AjazzMouseDriver:
     PRIMARY_VID = "249a"
     PRIMARY_PID = "5c2f"
 
+    # Write opcodes on AJAZZ AJ179 V2 (VID 249a:5c2f) firmware — NEVER send from read_state()
     CMD_POLLING = 0x02
     CMD_DPI = 0x03
-    CMD_BATTERY = 0x04
-    CMD_LED = 0x05
-    CMD_SLEEP = 0x06
+    CMD_LED = 0x04
+    CMD_SENSOR = 0x06
+    CMD_SLEEP = 0x07
 
-    # Live read opcodes observed on AJAZZ AJ179 V2 (VID 249a:5c2f) firmware
+    # Read-only opcodes on AJAZZ AJ179 V2 (VID 249a:5c2f) firmware
     CMD_INFO = 0x10
+    CMD_BATTERY = CMD_INFO
     CMD_POLLING_READ = 0x12
     CMD_DPI_READ = 0x13
     CMD_LED_READ = 0x14
@@ -308,7 +315,15 @@ class AjazzMouseDriver:
 
     VALID_POLLING_RATES = {125: 0x08, 250: 0x04, 500: 0x02, 1000: 0x01}
     POLLING_FROM_CODE = {v: k for k, v in VALID_POLLING_RATES.items()}
-    DEFAULT_DPI_STAGES = [400, 800, 1600, 3200, 6400, 12000]
+    DEFAULT_DPI_STAGES = [400, 950, 1200, 1600, 2400, 3200]
+    DEFAULT_DPI_COLORS = [
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255],
+        [0, 255, 255],
+        [255, 255, 0],
+        [255, 0, 255],
+    ]
 
     def __init__(
         self,
@@ -323,36 +338,70 @@ class AjazzMouseDriver:
         self.io_timeout = io_timeout
 
     @staticmethod
-    def build_packet(cmd: int, write: bool = False, payload: bytes = b"") -> bytes:
-        return build_packet(cmd, write=write, payload=payload)
+    def build_packet(
+        cmd: int,
+        write: bool = False,
+        payload: bytes = b"",
+        length_override: Optional[int] = None,
+    ) -> bytes:
+        return build_packet(cmd, write=write, payload=payload, length_override=length_override)
 
     @staticmethod
     def verify_checksum(frame32: bytes) -> bool:
         return verify_checksum(frame32)
 
+    def _normalize_dpi_colors(self, raw_colors: Any) -> List[List[int]]:
+        colors: List[List[int]] = []
+        if isinstance(raw_colors, list):
+            for entry in raw_colors[:6]:
+                if isinstance(entry, (list, tuple)) and len(entry) == 3:
+                    colors.append([max(0, min(255, int(c))) for c in entry])
+        while len(colors) < 6:
+            colors.append(list(self.DEFAULT_DPI_COLORS[len(colors)]))
+        return colors
+
     def _load_cache(self) -> Dict[str, Any]:
         cached = _read_json_file(self.cache_path)
+        stages_raw = cached.get("dpi_stages")
+        stages = (
+            [int(v) for v in stages_raw[:6]]
+            if isinstance(stages_raw, list) and len(stages_raw) >= 6
+            else list(self.DEFAULT_DPI_STAGES)
+        )
+        active_stage = max(0, min(5, int(cached.get("active_dpi_stage", 2))))
+        colors = self._normalize_dpi_colors(cached.get("dpi_colors"))
+        default_led = "#{:02X}{:02X}{:02X}".format(*colors[active_stage])
         return {
             "battery": cached.get("battery"),
             "charging": bool(cached.get("charging", False)),
-            "dpi_stages": list(cached.get("dpi_stages") or self.DEFAULT_DPI_STAGES),
-            "active_dpi_stage": int(cached.get("active_dpi_stage", 2)),
-            "current_dpi": int(cached.get("current_dpi", 1600)),
-            "polling_rate": int(cached.get("polling_rate", 1000)),
-            "led_color": str(cached.get("led_color", "#3B82F6")),
+            "dpi_stages": stages,
+            "active_dpi_stage": active_stage,
+            "current_dpi": int(cached.get("current_dpi", stages[active_stage])),
+            "polling_rate": int(cached.get("polling_rate", 250)),
+            "dpi_colors": colors,
+            "led_color": str(cached.get("led_color", default_led)),
             "sleep_seconds": int(cached.get("sleep_seconds", 300)),
             "updated_at": cached.get("updated_at"),
         }
 
     def _save_cache(self, state: Dict[str, Any]) -> None:
+        stages_raw = state.get("dpi_stages")
+        stages = (
+            [int(v) for v in stages_raw[:6]]
+            if isinstance(stages_raw, list) and len(stages_raw) >= 6
+            else list(self.DEFAULT_DPI_STAGES)
+        )
+        active_stage = max(0, min(5, int(state.get("active_dpi_stage", 2))))
+        colors = self._normalize_dpi_colors(state.get("dpi_colors"))
         payload = {
             "battery": state.get("battery"),
             "charging": bool(state.get("charging", False)),
-            "dpi_stages": list(state.get("dpi_stages") or self.DEFAULT_DPI_STAGES),
-            "active_dpi_stage": int(state.get("active_dpi_stage", 2)),
-            "current_dpi": int(state.get("current_dpi", 1600)),
-            "polling_rate": int(state.get("polling_rate", 1000)),
-            "led_color": str(state.get("led_color", "#3B82F6")),
+            "dpi_stages": stages,
+            "active_dpi_stage": active_stage,
+            "current_dpi": int(state.get("current_dpi", stages[active_stage])),
+            "polling_rate": int(state.get("polling_rate", 250)),
+            "dpi_colors": colors,
+            "led_color": str(state.get("led_color", "#{:02X}{:02X}{:02X}".format(*colors[active_stage]))),
             "sleep_seconds": int(state.get("sleep_seconds", 300)),
             "updated_at": int(time.time()),
         }
@@ -385,9 +434,11 @@ class AjazzMouseDriver:
         cmd: int,
         write: bool = False,
         payload: bytes = b"",
+        length_override: Optional[int] = None,
     ) -> Optional[bytes]:
         """Send a 33-byte vendor HID frame and read a 32-byte response if available."""
-        frame = build_packet(cmd, write=write, payload=payload)
+        frame = build_packet(cmd, write=write, payload=payload, length_override=length_override)
+        self._last_write_ok = False
         fd: Optional[int] = None
         locked = False
         try:
@@ -411,6 +462,7 @@ class AjazzMouseDriver:
             written = os.write(fd, frame)
             if written != len(frame):
                 return None
+            self._last_write_ok = True
 
             deadline = time.monotonic() + self.io_timeout
             last_resp: Optional[bytes] = None
@@ -455,9 +507,14 @@ class AjazzMouseDriver:
         return None, False
 
     def read_state(self) -> Dict[str, Any]:
-        """Read live mouse telemetry, falling back to persistent cache in PAW3395 deep sleep."""
+        """Read live mouse telemetry using ONLY read-only opcodes (0x10, 0x12, 0x13, 0x14, 0x17).
+
+        SAFETY RULE (BUG-001): Never send write opcodes (0x02..0x09) from read_state().
+        Falls back to persistent cache when the PAW3395 sensor is in deep sleep.
+        """
         cache = self._load_cache()
         node = self.find_vendor_node()
+        dpi_colors = self._normalize_dpi_colors(cache.get("dpi_colors"))
 
         state: Dict[str, Any] = {
             "id": "ajazz_aj179_v2",
@@ -490,7 +547,7 @@ class AjazzMouseDriver:
 
         live_ok = False
 
-        # 1. Query primary device info opcode (0x10) used by AJAZZ AJ179 V2 firmware
+        # 1. Query primary device info opcode (0x10) — read-only
         # Example live response: 10 00 01 0b 4e 36 32 34 84 01 11 01 00 30 01 ... b2
         #   resp[12] = charging (0x01), resp[13] = battery % (0x30 = 48%), resp[14] = online (0x01)
         info_resp = self._hid_exchange(node["dev_path"], self.CMD_INFO, write=False)
@@ -500,8 +557,8 @@ class AjazzMouseDriver:
                 live_ok = True
             elif (
                 info_resp[0] == self.CMD_INFO
+                and info_resp[1] == 0x00
                 and info_resp[2] != 0xFF
-                and (info_resp[1] == 0x00 or verify_checksum(info_resp))
             ):
                 if info_resp[3] >= 11 and 1 <= info_resp[13] <= 100:
                     state["battery"] = int(info_resp[13])
@@ -512,97 +569,71 @@ class AjazzMouseDriver:
                     state["charging"] = bool(info_resp[5] == 0x01)
                     live_ok = True
 
-        # 2. Fallback to CMD_BATTERY (0x04) for alternate firmware / mocked compatibility
-        # Note: in PAW3395 deep sleep, the 2.4GHz receiver replies with status=0xFF / len=0 (all-zero payload).
-        if not live_ok:
-            bat_resp = self._hid_exchange(node["dev_path"], self.CMD_BATTERY, write=False)
-            if bat_resp is not None and len(bat_resp) >= 32:
-                if bat_resp[0] == self.CMD_ASYNC_BATTERY and 1 <= bat_resp[2] <= 100:
-                    state["battery"] = int(bat_resp[2])
-                    live_ok = True
-                elif (
-                    verify_checksum(bat_resp)
-                    and bat_resp[0] == self.CMD_BATTERY
-                    and bat_resp[2] != 0xFF
-                    and bat_resp[3] > 0
-                ):
-                    pct = bat_resp[4]
-                    if 1 <= pct <= 100:
-                        state["battery"] = int(pct)
-                        state["charging"] = bool(bat_resp[5] == 1)
-                        live_ok = True
-
-        # Optional live DPI / Polling / LED / Sleep readback when awake
+        # 2. Live readback of DPI (0x13), Polling (0x12), LED colors (0x14), Sleep (0x17)
         if live_ok:
             dpi_resp = self._hid_exchange(node["dev_path"], self.CMD_DPI_READ, write=False)
-            if dpi_resp is None or dpi_resp[0] != self.CMD_DPI_READ or dpi_resp[2] == 0xFF:
-                dpi_resp = self._hid_exchange(node["dev_path"], self.CMD_DPI, write=False)
             if (
                 dpi_resp is not None
-                and verify_checksum(dpi_resp)
-                and dpi_resp[0] in (self.CMD_DPI_READ, self.CMD_DPI)
+                and len(dpi_resp) >= 29
+                and dpi_resp[0] == self.CMD_DPI_READ
+                and dpi_resp[1] == 0x00
                 and dpi_resp[2] != 0xFF
-                and dpi_resp[3] >= 3
+                and any(dpi_resp[5:29])
             ):
-                stage = int(dpi_resp[4])
-                dpi_val = struct.unpack_from("<H", dpi_resp, 5)[0]
-                if 400 <= dpi_val <= 26000:
-                    state["current_dpi"] = dpi_val
-                    if 0 <= stage < len(state["dpi_stages"]):
-                        state["active_dpi_stage"] = stage
+                active_stage = min(5, max(0, (dpi_resp[4] >> 4) & 0x0F))
+                stages = list(state["dpi_stages"])
+                while len(stages) < 6:
+                    stages.append(self.DEFAULT_DPI_STAGES[len(stages)])
+                for i in range(6):
+                    raw = dpi_resp[5 + 4 * i] | (dpi_resp[6 + 4 * i] << 8)
+                    if raw > 0:
+                        stages[i] = max(50, min(26000, raw * 50))
+                state["dpi_stages"] = stages[:6]
+                state["active_dpi_stage"] = active_stage
+                state["current_dpi"] = state["dpi_stages"][active_stage]
 
             poll_resp = self._hid_exchange(node["dev_path"], self.CMD_POLLING_READ, write=False)
-            if poll_resp is None or poll_resp[0] != self.CMD_POLLING_READ or poll_resp[2] == 0xFF:
-                poll_resp = self._hid_exchange(node["dev_path"], self.CMD_POLLING, write=False)
             if (
                 poll_resp is not None
-                and verify_checksum(poll_resp)
-                and poll_resp[0] in (self.CMD_POLLING_READ, self.CMD_POLLING)
+                and len(poll_resp) >= 32
+                and poll_resp[0] == self.CMD_POLLING_READ
+                and poll_resp[1] == 0x00
                 and poll_resp[2] != 0xFF
-                and poll_resp[3] >= 1
             ):
                 hz = self.POLLING_FROM_CODE.get(poll_resp[4])
                 if hz:
                     state["polling_rate"] = hz
 
             led_resp = self._hid_exchange(node["dev_path"], self.CMD_LED_READ, write=False)
-            if led_resp is None or led_resp[0] != self.CMD_LED_READ or led_resp[2] == 0xFF:
-                led_resp = self._hid_exchange(node["dev_path"], self.CMD_LED, write=False)
             if (
                 led_resp is not None
-                and verify_checksum(led_resp)
-                and led_resp[0] in (self.CMD_LED_READ, self.CMD_LED)
+                and len(led_resp) >= 22
+                and led_resp[0] == self.CMD_LED_READ
+                and led_resp[1] == 0x00
                 and led_resp[2] != 0xFF
-                and led_resp[3] >= 3
             ):
-                r, g, b = led_resp[4], led_resp[5], led_resp[6]
-                if any((r, g, b)):
+                parsed_colors = [
+                    [led_resp[4 + 3 * i], led_resp[5 + 3 * i], led_resp[6 + 3 * i]]
+                    for i in range(6)
+                ]
+                if any(any(rgb) for rgb in parsed_colors):
+                    dpi_colors = parsed_colors
+                    active_idx = max(0, min(5, int(state["active_dpi_stage"])))
+                    r, g, b = dpi_colors[active_idx]
                     state["led_color"] = f"#{r:02X}{g:02X}{b:02X}"
 
             sleep_resp = self._hid_exchange(node["dev_path"], self.CMD_SLEEP_READ, write=False)
             if (
                 sleep_resp is not None
-                and verify_checksum(sleep_resp)
+                and len(sleep_resp) >= 32
                 and sleep_resp[0] == self.CMD_SLEEP_READ
+                and sleep_resp[1] == 0x00
                 and sleep_resp[2] != 0xFF
-                and sleep_resp[3] >= 1
                 and sleep_resp[4] > 0
             ):
                 sec = int(sleep_resp[4]) * 10
-                if 30 <= sec <= 3600:
+                if 10 <= sec <= 3600:
                     state["sleep_seconds"] = sec
-            else:
-                sleep_resp = self._hid_exchange(node["dev_path"], self.CMD_SLEEP, write=False)
-                if (
-                    sleep_resp is not None
-                    and verify_checksum(sleep_resp)
-                    and sleep_resp[0] == self.CMD_SLEEP
-                    and sleep_resp[2] != 0xFF
-                    and sleep_resp[3] >= 2
-                ):
-                    sec = struct.unpack_from("<H", sleep_resp, 4)[0]
-                    if 30 <= sec <= 3600:
-                        state["sleep_seconds"] = sec
 
         # Passive power_supply fallback if HID didn't answer
         if not live_ok:
@@ -617,7 +648,9 @@ class AjazzMouseDriver:
             state["standby"] = False
             state["cached"] = False
             state["connection_type"] = "USB-C" if state["charging"] else base_conn
-            self._save_cache(state)
+            cache_to_save = dict(state)
+            cache_to_save["dpi_colors"] = dpi_colors
+            self._save_cache(cache_to_save)
         else:
             # Receiver present, sensor PAW3395 in deep sleep -> preserve last known cache
             state["active"] = False
@@ -627,31 +660,36 @@ class AjazzMouseDriver:
 
         return state
 
-    def _send_write_control(self, cmd: int, payload: bytes) -> Tuple[bool, str]:
+    def _send_write_control(
+        self,
+        cmd: int,
+        payload: bytes,
+        length_override: Optional[int] = None,
+    ) -> Tuple[bool, str]:
         node = self.find_vendor_node()
         if node is None:
             return False, "Mouse AJAZZ AJ179 V2 não conectado."
-        frame = build_packet(cmd, write=True, payload=payload)
-        fd: Optional[int] = None
-        try:
-            fd = os.open(node["dev_path"], os.O_RDWR | os.O_NONBLOCK)
-            written = os.write(fd, frame)
-            if written != len(frame):
-                return False, f"Escrita HID incompleta ({written}/{len(frame)} bytes)."
-            return True, node["dev_path"]
-        except PermissionError:
-            return False, f"Sem permissão em {node['dev_path']}. Instale as regras udev."
-        except OSError as exc:
-            return False, f"Erro de comunicação HID ({exc})."
-        finally:
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
+        dev_path = node["dev_path"]
+        if os.path.exists(dev_path) and not os.access(dev_path, os.R_OK | os.W_OK):
+            return False, f"Sem permissão em {dev_path}. Instale as regras udev."
+        self._last_write_ok = False
+        resp = self._hid_exchange(
+            dev_path,
+            cmd,
+            write=True,
+            payload=payload,
+            length_override=length_override,
+        )
+        if resp is not None:
+            if len(resp) >= 3 and resp[2] == 0xFF:
+                return False, f"Mouse em standby/NACK ao aplicar comando 0x{cmd:02X}."
+            return True, dev_path
+        if self._last_write_ok:
+            return True, dev_path
+        return False, f"Erro de comunicação HID em {dev_path}."
 
     def set_dpi(self, dpi: int) -> Tuple[bool, str]:
-        """Set active DPI (400..26000) on the AJAZZ AJ179 V2."""
+        """Set active DPI (400..26000, multiple of 50) using 25-byte stage table (cmd=0x03, len=0x25)."""
         try:
             dpi_int = int(dpi)
         except (TypeError, ValueError):
@@ -659,27 +697,39 @@ class AjazzMouseDriver:
         if not (400 <= dpi_int <= 26000):
             return False, "DPI deve estar entre 400 e 26000."
 
+        dpi_rounded = max(400, min(26000, int(round(dpi_int / 50.0)) * 50))
         cache = self._load_cache()
-        stages = list(cache["dpi_stages"])
-        if dpi_int in stages:
-            stage_idx = stages.index(dpi_int)
-        else:
-            stage_idx = max(0, min(cache["active_dpi_stage"], len(stages) - 1))
-            stages[stage_idx] = dpi_int
+        stages = list(cache["dpi_stages"])[:6]
+        while len(stages) < 6:
+            stages.append(self.DEFAULT_DPI_STAGES[len(stages)])
 
-        payload = struct.pack("<BH", stage_idx, dpi_int)
-        ok, info = self._send_write_control(self.CMD_DPI, payload)
+        if dpi_rounded in stages:
+            stage_idx = stages.index(dpi_rounded)
+        else:
+            stage_idx = max(0, min(5, int(cache["active_dpi_stage"])))
+            stages[stage_idx] = dpi_rounded
+
+        payload = bytearray([((stage_idx & 0x0F) << 4) | 0x06])
+        for d in stages:
+            raw = max(1, int(d) // 50)
+            lo = raw & 0xFF
+            hi = (raw >> 8) & 0xFF
+            payload.extend([lo, hi, lo, hi])
+
+        ok, info = self._send_write_control(self.CMD_DPI, bytes(payload), length_override=0x25)
         if not ok:
             return False, info
 
+        colors = self._normalize_dpi_colors(cache.get("dpi_colors"))
         cache["dpi_stages"] = stages
         cache["active_dpi_stage"] = stage_idx
-        cache["current_dpi"] = dpi_int
+        cache["current_dpi"] = dpi_rounded
+        cache["led_color"] = "#{:02X}{:02X}{:02X}".format(*colors[stage_idx])
         self._save_cache(cache)
-        return True, f"DPI ajustado para {dpi_int}."
+        return True, f"DPI ajustado para {dpi_rounded}."
 
     def set_polling_rate(self, hz: int) -> Tuple[bool, str]:
-        """Set USB/2.4GHz polling rate (125, 250, 500 or 1000 Hz)."""
+        """Set USB/2.4GHz polling rate (125, 250, 500 or 1000 Hz) via cmd=0x02."""
         try:
             hz_int = int(hz)
         except (TypeError, ValueError):
@@ -698,7 +748,7 @@ class AjazzMouseDriver:
         return True, f"Polling rate ajustado para {hz_int} Hz."
 
     def set_led_color(self, hex_color: str) -> Tuple[bool, str]:
-        """Set mouse side LED RGB color using #RRGGBB notation."""
+        """Set active DPI stage LED RGB color via cmd=0x04 (len=0x12, 6xRGB = 18 bytes)."""
         if not isinstance(hex_color, str):
             return False, "Cor LED inválida. Use formato #RRGGBB."
         raw = hex_color.strip()
@@ -710,17 +760,23 @@ class AjazzMouseDriver:
         b = int(hex_digits[4:6], 16)
         normalized = f"#{hex_digits}"
 
-        ok, info = self._send_write_control(self.CMD_LED, bytes([r, g, b]))
+        cache = self._load_cache()
+        stage_idx = max(0, min(5, int(cache["active_dpi_stage"])))
+        colors = self._normalize_dpi_colors(cache.get("dpi_colors"))
+        colors[stage_idx] = [r, g, b]
+        payload = bytes(ch for rgb in colors[:6] for ch in rgb)
+
+        ok, info = self._send_write_control(self.CMD_LED, payload, length_override=0x12)
         if not ok:
             return False, info
 
-        cache = self._load_cache()
+        cache["dpi_colors"] = colors
         cache["led_color"] = normalized
         self._save_cache(cache)
         return True, f"Cor LED ajustada para {normalized}."
 
     def set_sleep_timeout(self, seconds: int) -> Tuple[bool, str]:
-        """Set PAW3395 deep-sleep timeout in seconds (30..3600)."""
+        """Set PAW3395 deep-sleep timeout in seconds (30..3600) via cmd=0x07 (len=0x04)."""
         try:
             sec_int = int(seconds)
         except (TypeError, ValueError):
@@ -728,15 +784,17 @@ class AjazzMouseDriver:
         if not (30 <= sec_int <= 3600):
             return False, "Tempo de standby deve estar entre 30 e 3600 segundos."
 
-        payload = struct.pack("<H", sec_int)
-        ok, info = self._send_write_control(self.CMD_SLEEP, payload)
+        sleep_10s = max(1, min(255, sec_int // 10))
+        payload = bytes([sleep_10s, 0x01, 0x00, 8])
+        ok, info = self._send_write_control(self.CMD_SLEEP, payload, length_override=0x04)
         if not ok:
             return False, info
 
+        effective_sec = sleep_10s * 10
         cache = self._load_cache()
-        cache["sleep_seconds"] = sec_int
+        cache["sleep_seconds"] = effective_sec
         self._save_cache(cache)
-        return True, f"Tempo de standby ajustado para {sec_int}s."
+        return True, f"Tempo de standby ajustado para {effective_sec}s."
 
 
 # ---------------------------------------------------------------------------

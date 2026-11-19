@@ -134,24 +134,67 @@ class TestAjazzMouseDriver(unittest.TestCase):
                 power_supply_root=power_root,
             )
 
-            bat_frame = build_packet(driver.CMD_BATTERY, write=False, payload=bytes([78, 0]))[1:]
-            dpi_frame = build_packet(driver.CMD_DPI, write=False, payload=bytes([3, 0x80, 0x0C]))[1:]
-            poll_frame = build_packet(driver.CMD_POLLING, write=False, payload=bytes([0x02]))[1:]
-            led_frame = build_packet(driver.CMD_LED, write=False, payload=bytes([0x22, 0xC5, 0x5E]))[1:]
-            sleep_frame = build_packet(driver.CMD_SLEEP, write=False, payload=bytes([0x84, 0x03]))[1:]
+            # Build real read-only firmware frames (0x10, 0x12, 0x13, 0x14, 0x17)
+            info_frame = bytearray(32)
+            info_frame[0] = driver.CMD_INFO
+            info_frame[1] = 0x00
+            info_frame[2] = 0x01
+            info_frame[3] = 0x0B
+            info_frame[12] = 0x00  # not charging
+            info_frame[13] = 78    # 78%
+
+            dpi_frame = bytearray(32)
+            dpi_frame[0] = driver.CMD_DPI_READ
+            dpi_frame[1] = 0x00
+            dpi_frame[2] = 0x01
+            dpi_frame[3] = 0x19
+            dpi_frame[4] = (3 << 4) | 0x06  # active stage = 3
+            stages = [400, 950, 1200, 3200, 2400, 6400]
+            for idx, d in enumerate(stages):
+                raw = d // 50
+                lo, hi = raw & 0xFF, (raw >> 8) & 0xFF
+                dpi_frame[5 + 4 * idx : 9 + 4 * idx] = bytes([lo, hi, lo, hi])
+
+            poll_frame = bytearray(32)
+            poll_frame[0] = driver.CMD_POLLING_READ
+            poll_frame[1] = 0x00
+            poll_frame[2] = 0x01
+            poll_frame[4] = 0x02  # 500 Hz
+
+            led_frame = bytearray(32)
+            led_frame[0] = driver.CMD_LED_READ
+            led_frame[1] = 0x00
+            led_frame[2] = 0x01
+            led_frame[3] = 0x12
+            colors = [
+                (255, 0, 0),
+                (0, 255, 0),
+                (0, 0, 255),
+                (0x22, 0xC5, 0x5E),  # stage 3 -> #22C55E
+                (255, 255, 0),
+                (255, 0, 255),
+            ]
+            for idx, (r, g, b) in enumerate(colors):
+                led_frame[4 + 3 * idx : 7 + 3 * idx] = bytes([r, g, b])
+
+            sleep_frame = bytearray(32)
+            sleep_frame[0] = driver.CMD_SLEEP_READ
+            sleep_frame[1] = 0x00
+            sleep_frame[2] = 0x01
+            sleep_frame[4] = 90  # 90 * 10 = 900s
 
             responses = {
-                driver.CMD_BATTERY: bat_frame,
-                driver.CMD_DPI: dpi_frame,
-                driver.CMD_POLLING: poll_frame,
-                driver.CMD_LED: led_frame,
-                driver.CMD_SLEEP: sleep_frame,
+                driver.CMD_INFO: bytes(info_frame),
+                driver.CMD_DPI_READ: bytes(dpi_frame),
+                driver.CMD_POLLING_READ: bytes(poll_frame),
+                driver.CMD_LED_READ: bytes(led_frame),
+                driver.CMD_SLEEP_READ: bytes(sleep_frame),
             }
 
             with mock.patch.object(
                 driver,
                 "_hid_exchange",
-                side_effect=lambda dev, cmd, write=False, payload=b"": responses.get(cmd),
+                side_effect=lambda dev, cmd, write=False, payload=b"", length_override=None: responses.get(cmd),
             ):
                 live = driver.read_state()
 
@@ -161,6 +204,7 @@ class TestAjazzMouseDriver(unittest.TestCase):
             self.assertFalse(live["cached"])
             self.assertEqual(live["battery"], 78)
             self.assertEqual(live["connection_type"], "2.4GHz")
+            self.assertEqual(live["dpi_stages"], stages)
             self.assertEqual(live["current_dpi"], 3200)
             self.assertEqual(live["active_dpi_stage"], 3)
             self.assertEqual(live["polling_rate"], 500)
@@ -170,7 +214,7 @@ class TestAjazzMouseDriver(unittest.TestCase):
 
             # Simulate PAW3395 deep sleep: receiver replies with NACK 0xFF / empty payload
             nack = bytearray(32)
-            nack[0] = driver.CMD_BATTERY
+            nack[0] = driver.CMD_INFO
             nack[2] = 0xFF
             nack[3] = 0
             nack[31] = sum(nack[4:31]) & 0xFF
@@ -186,6 +230,85 @@ class TestAjazzMouseDriver(unittest.TestCase):
             self.assertEqual(standby_state["battery"], 78)
             self.assertEqual(standby_state["current_dpi"], 3200)
             self.assertEqual(standby_state["polling_rate"], 500)
+
+    def test_read_state_never_sends_write_opcodes(self) -> None:
+        """BUG-001 safety regression guard: read_state() must NEVER send write opcodes (0x02..0x09)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            _make_fake_hidraw_node(hidraw_root, "hidraw4", "249a", "5c2f", hid_name="AJAZZ AJ179 V2")
+            driver = AjazzMouseDriver(
+                cache_path=root / "mouse_state.json",
+                hidraw_root=hidraw_root,
+                power_supply_root=root / "power",
+            )
+
+            seen_calls = []
+
+            def spy_exchange(dev, cmd, write=False, payload=b"", length_override=None):
+                seen_calls.append((cmd, write, payload))
+                # Return valid 0x10 battery so sub-queries (0x13/0x12/0x14/0x17) also execute,
+                # then return all-zeros/None for sub-queries to confirm no write fallback happens.
+                if cmd == driver.CMD_INFO:
+                    return bytes.fromhex("1000010b4e3632348401110100300100000000000000000000000000000000b2")
+                return bytes(32)
+
+            with mock.patch.object(driver, "_hid_exchange", side_effect=spy_exchange):
+                driver.read_state()
+
+            # Also test when 0x10 itself fails / returns None
+            with mock.patch.object(driver, "_hid_exchange", side_effect=lambda d, c, write=False, payload=b"", length_override=None: (seen_calls.append((c, write, payload)) or None)):
+                driver.read_state()
+
+            self.assertGreater(len(seen_calls), 0)
+            for cmd, write, _ in seen_calls:
+                self.assertFalse(write, msg=f"read_state sent write=True for cmd=0x{cmd:02X}")
+                self.assertNotIn(cmd, range(0x02, 0x0A), msg=f"read_state sent forbidden write opcode 0x{cmd:02X}")
+
+    def test_set_dpi_sends_0x03_25_byte_stage_table(self) -> None:
+        """BUG-001 fix guard: set_dpi(1200) must send cmd=0x03, write=0x01, len=0x25, 25B stage table."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            cache_path = root / "mouse_state.json"
+            _make_fake_hidraw_node(hidraw_root, "hidraw4", "249a", "5c2f", hid_name="AJAZZ AJ179 V2")
+            driver = AjazzMouseDriver(cache_path=cache_path, hidraw_root=hidraw_root)
+
+            written_frames = []
+            ack = bytearray(32)
+            ack[0] = 0x03
+            ack[1] = 0x00
+            ack[2] = 0x01
+
+            def fake_write(fd, data):
+                written_frames.append(data)
+                return len(data)
+
+            with mock.patch("dpi_core.hardware.os.open", return_value=77), \
+                 mock.patch("dpi_core.hardware.os.close"), \
+                 mock.patch("dpi_core.hardware.fcntl.flock"), \
+                 mock.patch("dpi_core.hardware.select.select", side_effect=[([], [], []), ([77], [], [])]), \
+                 mock.patch("dpi_core.hardware.os.write", side_effect=fake_write), \
+                 mock.patch("dpi_core.hardware.os.read", return_value=bytes(ack)):
+                ok, _ = driver.set_dpi(1200)
+
+            self.assertTrue(ok)
+            self.assertEqual(len(written_frames), 1)
+            frame33 = written_frames[0]
+            self.assertEqual(len(frame33), 33)
+            self.assertEqual(frame33[0], 0x00)
+            body = frame33[1:]
+            self.assertEqual(body[0], 0x03)
+            self.assertEqual(body[2], 0x01)
+            self.assertEqual(body[3], 0x25)
+            self.assertEqual(body[4], (2 << 4) | 0x06)  # stage 2 = 1200 DPI, 6 stages
+
+            expected_stages = [400, 950, 1200, 1600, 2400, 3200]
+            for idx, d in enumerate(expected_stages):
+                raw = d // 50
+                lo, hi = raw & 0xFF, (raw >> 8) & 0xFF
+                self.assertEqual(list(body[5 + 4 * idx : 9 + 4 * idx]), [lo, hi, lo, hi])
+            self.assertTrue(verify_checksum(body))
 
     def test_live_read_0x10_device_info_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

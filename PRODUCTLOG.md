@@ -62,7 +62,25 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
 
 ---
 
-## 4. Procedimentos de Rollback
+## 4. Registro de Bugs e Incidentes
+
+### `BUG-001` — Queda de DPI do AJAZZ AJ179 V2 para 50 DPI e Falha de Ajuste via `0x03` (`2026-11-19`)
+- **Severidade**: Alta (alteração involuntária de estado em hardware real).
+- **Causa Raiz**:
+  1. Quando as leituras HID `0x13`/`0x12`/`0x14`/`0x17` não casavam o parser anterior, `AjazzMouseDriver.read_state()` executava fallback enviando opcodes de **escrita** (`0x03`, `0x02`, `0x05`, `0x06`) com payload zerado a cada ciclo de 5s.
+  2. `set_dpi()` enviava apenas 3 bytes (`<BH`) em vez do frame real de **25 bytes** com `buf[3]=0x25` (`length_override=0x25`) e 6 estágios `[lo, hi, lo, hi]` (`raw = dpi // 50`).
+  3. `set_led_color()` enviava `0x05` em vez de `0x04` (`length_override=0x12`, 6×RGB = 18B) e `set_sleep_timeout()` enviava `0x06` (Sensor LOD/MotionSync) em vez de `0x07` (`length_override=0x04`).
+- **Impacto no Hardware**: A MCU do AJAZZ AJ179 V2 interpretou o pacote `0x03` zerado como gravação de `raw=0` (**50 DPI**, mínimo absoluto do sensor PAW3395) em todos os 6 estágios de DPI.
+- **Correção Aplicada**:
+  - Remoção total dos opcodes de escrita (`0x02..0x09`) de `read_state()`, restringindo o polling a `0x10`, `0x12`, `0x13`, `0x14`, `0x17`.
+  - Suporte a `length_override` em `build_packet()`, encoding de 25 bytes em `set_dpi()`, correção de `set_led_color()` (`0x04`/`0x12`) e `set_sleep_timeout()` (`0x07`/`0x04`), e serialização via `fcntl.flock(LOCK_EX)`.
+  - Atualização do card do mouse no `applet.js` para combinar `mouse.dpi_stages` do backend com os presets extras.
+- **Restauração do Perfil do Usuário**: Perfil restaurado no hardware real (`/dev/hidraw4`) com estágios `[400, 950, 1200, 1600, 2400, 3200]`, estágio ativo `2` (**1200 DPI**), polling rate `250 Hz`, LOD `2mm` e sleep `300s`.
+- **Nova Regra Preventiva**: Formalizada em `AGENTS.md` a proibição absoluta de enviar opcodes de escrita (`0x02..0x09`) em rotinas de leitura (`read_state()`), com cobertura obrigatória por teste de regressão em `tests/test_hardware.py`.
+
+---
+
+## 5. Procedimentos de Rollback
 
 Caso seja necessário reverter a instalação da Dynamic Peripheral Island no sistema:
 

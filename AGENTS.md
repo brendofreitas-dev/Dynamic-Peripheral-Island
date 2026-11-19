@@ -27,6 +27,11 @@ Regras inegociáveis para qualquer alteração em `K500KeyboardDriver`:
 - **Bloqueio de Escrita (`send_raw_packet`)**: Deve recusar qualquer escrita enquanto `safe_mode` estiver ativo (lançando `RuntimeError`).
 - Toda alteração nessa classe exige validação imediata pelos testes de segurança em `tests/test_hardware.py`.
 
+### Regra Preventiva Adicional — AJAZZ AJ179 V2 (`AjazzMouseDriver`)
+
+- **Leitura Estritamente Somente-Leitura (`read_state`)**: O método `AjazzMouseDriver.read_state()` **nunca** pode enviar opcodes de escrita (`0x02..0x09`) como fallback quando uma resposta falha ou vem zerada; deve utilizar exclusivamente opcodes de leitura (`0x10`, `0x12`, `0x13`, `0x14`, `0x17`).
+- **Exclusividade de Acesso (`fcntl.flock`)**: Toda escrita de controle (`0x02..0x07`) deve usar `LOCK_EX` para evitar condição de corrida com o polling periódico do applet.
+
 ---
 
 ## 3. Separação de Responsabilidades por Camada

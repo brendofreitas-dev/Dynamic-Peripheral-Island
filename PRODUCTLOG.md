@@ -115,6 +115,19 @@ Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes unitários garantindo conexão exclusiva a `button-press-event` nos segmentos e ausência de declarações `font-family:` no CSS.
 - **Validação**: Suíte completa de 30 testes aprovada, reload do applet sem nenhum `JS ERROR` ou `St-WARNING` em `~/.xsession-errors`, e verificação de clique no segmento Antigravity abrindo diretamente a aba correspondente sem qualquer oscilação de fonte.
 
+### `UX-002` — Dynamic Island Hover-Only, Layout Periféricos | Data e Hora | Antigravity e Reload de Tema (`2026-11-19`)
+- **Severidade**: Média (refinamento visual da TopBar e persistência indesejada de cache CSS no Cinnamon).
+- **Causa Raiz**:
+  1. A cápsula unificada mantinha todos os componentes à direita da data e hora (`calendar@cinnamon.org`), quebrando a simetria orgânica de uma Ilha Dinâmica centralizada.
+  2. A cápsula permanecia visível com borda/fundo estáticos mesmo quando o usuário não estava interagindo com ela, poluindo a barra superior do Cinnamon.
+  3. Descoberta de runtime: a chamada D-Bus `org.Cinnamon.ReloadXlet` recarrega apenas o arquivo JavaScript (`applet.js`), mas o Cinnamon armazena em cache o `stylesheet.css`. A recarga efetiva do CSS exige a invocação explícita de `org.Cinnamon.ReloadTheme`.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: criação do container `_leftSlot` (`St.BoxLayout`) inserido à esquerda do `calendarActor` via `centerBox.insert_child_below(this._leftSlot, calendarActor)`, mantendo `this.actor` à direita; conexão de eventos `enter-event` e `leave-event` no conjunto da ilha com debounce de 80ms para alternar `.dpi-capsule-hovered` suavemente; sincronização com `.dpi-capsule-open`; e descarte limpo de listeners e atores no lifecycle.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: definição de `.dpi-unified-capsule` como 100% transparente em estado idle; regras de glassmorphism em `.dpi-capsule-hovered` e `.dpi-capsule-open` (`rgba(40, 42, 54, 0.90)` no dark, `rgba(248, 250, 252, 0.92)` no light com bordas sutis e zero cor azul).
+  - `install.sh`: inclusão do comando D-Bus `org.Cinnamon.ReloadTheme` antes de `org.Cinnamon.ReloadXlet` para garantir aplicação atômica de estilos.
+  - `tests/test_cli_and_applet.py`: testes unitários adicionados para validar a inserção de `_leftSlot`, transparência em idle, classes de hover e presença de `ReloadTheme` no script de instalação.
+- **Validação**: 30/30 testes aprovados, reload de tema e applet validados sem erros no `~/.xsession-errors`, transição contínua sem piscar entre os elementos centrais e transparência perfeita da barra em repouso.
+
 ---
 
 ## 5. Procedimentos de Rollback

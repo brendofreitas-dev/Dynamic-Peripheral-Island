@@ -8,53 +8,95 @@
 
 .dpi-unified-capsule {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
-    border-radius: 6px;
-    padding: 0;
-    margin: 0;
+    border-radius: 8px;
+    padding: 0 4px;
+    margin: 1px 0;
     spacing: 2px;
     transition-duration: 180ms;
 }
 
 .dpi-unified-capsule.dpi-theme-dark {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
     color: #F8FAFC;
 }
 
 .dpi-unified-capsule.dpi-theme-light {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
     color: #0F172A;
+}
+
+.dpi-unified-capsule.dpi-theme-dark.dpi-capsule-hovered,
+.dpi-unified-capsule.dpi-theme-dark.dpi-capsule-open {
+    background-color: rgba(40, 42, 54, 0.90);
+    border-color: rgba(189, 147, 249, 0.35);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+    border-radius: 8px;
+}
+
+.dpi-unified-capsule.dpi-theme-light.dpi-capsule-hovered,
+.dpi-unified-capsule.dpi-theme-light.dpi-capsule-open {
+    background-color: rgba(248, 250, 252, 0.92);
+    border-color: rgba(15, 23, 42, 0.16);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
 }
 
 /* Fallback when applet is placed outside panel._centerBox */
 .dpi-standalone-capsule {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
-    border-radius: 6px;
-    padding: 0;
-    margin: 0;
+    border-radius: 8px;
+    padding: 0 4px;
+    margin: 1px 0;
     spacing: 4px;
     transition-duration: 180ms;
 }
 
 .dpi-standalone-capsule.dpi-theme-dark {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
     color: #F8FAFC;
 }
 
 .dpi-standalone-capsule.dpi-theme-light {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent;
     box-shadow: none;
     color: #0F172A;
+}
+
+.dpi-standalone-capsule.dpi-theme-dark.dpi-capsule-hovered,
+.dpi-standalone-capsule.dpi-theme-dark.dpi-capsule-open {
+    background-color: rgba(40, 42, 54, 0.90);
+    border-color: rgba(189, 147, 249, 0.35);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+    border-radius: 8px;
+}
+
+.dpi-standalone-capsule.dpi-theme-light.dpi-capsule-hovered,
+.dpi-standalone-capsule.dpi-theme-light.dpi-capsule-open {
+    background-color: rgba(248, 250, 252, 0.92);
+    border-color: rgba(15, 23, 42, 0.16);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+}
+
+/* Left slot holding Peripherals on the left side of Clock */
+.dpi-left-slot {
+    spacing: 4px;
+    padding: 0;
+    margin: 0;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 /* Harmonized native Cinnamon calendar@cinnamon.org sibling inside capsule */

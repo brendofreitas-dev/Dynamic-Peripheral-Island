@@ -5,6 +5,23 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.3] - 2026-11-19
+
+### Adicionado
+- **Layout Centralizado `[ Periféricos | Data e Hora | Antigravity ]` (`applet/dynamic-peripheral-island@brendo/applet.js`)**:
+  - Implementado container `_leftSlot` inserido à esquerda do relógio do sistema (`calendar@cinnamon.org`) no painel central via `centerBox.insert_child_below(this._leftSlot, calendarActor)`.
+  - Posicionamento orgânico com Periféricos à esquerda da Data/Hora e Antigravity + Morphing Pill à direita em `this.actor`, sem reparentar nem corromper instâncias de applets vizinhos.
+  - Limpeza completa no ciclo de vida (`_detachUnifiedCapsule` e `on_applet_removed_from_panel`), prevenindo memory leaks e nós órfãos em reloads do Cinnamon.
+
+### Alterado
+- **UX-002 (Dynamic Island Hover-Only & Transparência em Idle)**:
+  - Cápsula central (`.dpi-unified-capsule`) configurada com transparência total em estado de repouso/idle (`background-color: transparent`, `border: 1px solid transparent`, `box-shadow: none`).
+  - Efeito hover dinâmico ativado ao passar o mouse por qualquer um dos 3 elementos (Periféricos, Data/Hora ou Antigravity), aplicando `.dpi-capsule-hovered` no container com debounce de 80ms no leave para navegação contínua e sem piscar.
+  - Sincronização automática com `.dpi-capsule-open` quando o Popover Bento Grid ou um alerta morphing estiver ativo, garantindo visibilidade suave e consistente.
+  - Remoção definitiva de resquícios de fundo azul, utilizando tons suaves de glassmorphism (`rgba(40, 42, 54, 0.90)` no dark e `rgba(248, 250, 252, 0.92)` no light com bordas sutis).
+- **Recarga Automatizada do Tema (`install.sh`)**:
+  - Adicionada a chamada D-Bus `org.Cinnamon.ReloadTheme` antecedendo `org.Cinnamon.ReloadXlet`, garantindo que atualizações de classes e estilos em `stylesheet.css` entrem em vigor instantaneamente no compositor Muffin.
+
 ## [1.0.2] - 2026-11-19
 
 ### Corrigido

@@ -141,11 +141,15 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._morphTimerId = 0;
         this._toastTimerId = 0;
         this._idleAttachId = 0;
+        this._hoverLeaveTimerId = 0;
+        this._hoverCounter = 0;
         this._isPolling = false;
         this._prewarmed = false;
         this._destroyed = false;
         this._unifiedCenterBox = null;
+        this._leftSlot = null;
         this._taggedClockActors = [];
+        this._hoverSignals = [];
         this._seenAlerts = {};
         this._toastState = null;
 
@@ -276,10 +280,13 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
      * ====================================================================== */
 
     _buildTopBar() {
-        this._leadDivider = new St.Widget({ style_class: "dpi-capsule-divider" });
-        this._leadDivider.y_align = Clutter.ActorAlign.CENTER;
-        this._leadDivider.hide();
-        this.actor.add_child(this._leadDivider);
+        // Left slot for Peripherals on the left side of the Clock
+        this._leftSlot = new St.BoxLayout({
+            style_class: "dpi-left-slot",
+            y_align: Clutter.ActorAlign.CENTER,
+            reactive: true,
+            track_hover: true,
+        });
 
         // Peripherals Segment
         this._segPeripherals = new St.BoxLayout({
@@ -296,9 +303,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             }
             return Clutter.EVENT_PROPAGATE;
         });
-        this.actor.add_child(this._segPeripherals);
+        this._leftSlot.add_child(this._segPeripherals);
 
-        // Mid divider between Peripherals and Antigravity
+        // Mid divider between Clock and Antigravity
         this._midDivider = new St.Widget({ style_class: "dpi-capsule-divider" });
         this._midDivider.y_align = Clutter.ActorAlign.CENTER;
         this.actor.add_child(this._midDivider);
@@ -411,6 +418,54 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         });
     }
 
+    _updateHoverState(isEntering) {
+        if (this._destroyed) return;
+        let box = this._unifiedCenterBox || this.actor;
+        if (!box) return;
+
+        if (this._hoverLeaveTimerId) {
+            GLib.source_remove(this._hoverLeaveTimerId);
+            this._hoverLeaveTimerId = 0;
+        }
+
+        if (isEntering) {
+            this._hoverCounter = (this._hoverCounter || 0) + 1;
+            box.add_style_class_name("dpi-capsule-hovered");
+        } else {
+            this._hoverCounter = Math.max(0, (this._hoverCounter || 0) - 1);
+            this._hoverLeaveTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+                this._hoverLeaveTimerId = 0;
+                if (this._destroyed) return GLib.SOURCE_REMOVE;
+                let anyHover = false;
+                let checkList = [this._leftSlot, this.actor, this._unifiedCenterBox].concat(this._taggedClockActors);
+                for (let a of checkList) {
+                    if (a && (a.hover || a.has_pointer)) {
+                        anyHover = true;
+                        break;
+                    }
+                }
+                let menuOpen = Boolean(this.menu && this.menu.isOpen);
+                let alertActive = Boolean(this._morphPill && this._morphPill.visible);
+                if (!anyHover && this._hoverCounter <= 0 && !menuOpen && !alertActive) {
+                    box.remove_style_class_name("dpi-capsule-hovered");
+                }
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+    }
+
+    _syncCapsuleOpenState() {
+        let box = this._unifiedCenterBox || this.actor;
+        if (!box) return;
+        let menuOpen = Boolean(this.menu && this.menu.isOpen);
+        let alertActive = Boolean(this._morphPill && this._morphPill.visible);
+        if (menuOpen || alertActive) {
+            box.add_style_class_name("dpi-capsule-open");
+        } else {
+            box.remove_style_class_name("dpi-capsule-open");
+        }
+    }
+
     _attachUnifiedCapsule() {
         this._detachUnifiedCapsule();
 
@@ -424,34 +479,95 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             this._applyThemeToActor(centerBox, this._resolvedTheme);
 
             let children = centerBox.get_children();
-            let hasLeadingSibling = false;
+            let calendarActor = null;
             for (let i = 0; i < children.length; i++) {
                 let child = children[i];
-                if (child === this.actor) continue;
+                if (child === this.actor || child === this._leftSlot) continue;
                 let siblingUuid = child._applet ? child._applet._uuid : "";
                 if (siblingUuid === "calendar@cinnamon.org" || i < children.indexOf(this.actor)) {
                     child.add_style_class_name("dpi-capsule-clock");
                     this._taggedClockActors.push(child);
-                    hasLeadingSibling = true;
+                    calendarActor = child;
+                    break;
                 }
             }
 
-            if (hasLeadingSibling) {
-                this._leadDivider.show();
-            } else {
-                this._leadDivider.hide();
+            if (this._leftSlot) {
+                if (calendarActor) {
+                    centerBox.insert_child_below(this._leftSlot, calendarActor);
+                } else {
+                    this.actor.insert_child_at_index(this._leftSlot, 0);
+                }
             }
+
+            let hoverActors = [this._leftSlot, this.actor, centerBox];
+            if (calendarActor) hoverActors.push(calendarActor);
+
+            for (let a of hoverActors) {
+                if (!a) continue;
+                a.reactive = true;
+                a.track_hover = true;
+                let enterId = a.connect("enter-event", () => this._updateHoverState(true));
+                let leaveId = a.connect("leave-event", () => this._updateHoverState(false));
+                this._hoverSignals.push({ actor: a, id: enterId });
+                this._hoverSignals.push({ actor: a, id: leaveId });
+            }
+
+            this._syncCapsuleOpenState();
         } else {
             this.actor.add_style_class_name("dpi-standalone-capsule");
             this._applyThemeToActor(this.actor, this._resolvedTheme);
-            this._leadDivider.hide();
+
+            if (this._leftSlot) {
+                this.actor.insert_child_at_index(this._leftSlot, 0);
+            }
+
+            let hoverActors = [this._leftSlot, this.actor];
+            for (let a of hoverActors) {
+                if (!a) continue;
+                a.reactive = true;
+                a.track_hover = true;
+                let enterId = a.connect("enter-event", () => this._updateHoverState(true));
+                let leaveId = a.connect("leave-event", () => this._updateHoverState(false));
+                this._hoverSignals.push({ actor: a, id: enterId });
+                this._hoverSignals.push({ actor: a, id: leaveId });
+            }
+
+            this._syncCapsuleOpenState();
         }
     }
 
     _detachUnifiedCapsule() {
+        if (this._hoverLeaveTimerId) {
+            GLib.source_remove(this._hoverLeaveTimerId);
+            this._hoverLeaveTimerId = 0;
+        }
+
+        for (let s of this._hoverSignals) {
+            try {
+                s.actor.disconnect(s.id);
+            } catch (e) {
+                // ignore
+            }
+        }
+        this._hoverSignals = [];
+
+        if (this._leftSlot) {
+            let leftParent = this._leftSlot.get_parent();
+            if (leftParent) {
+                try {
+                    leftParent.remove_child(this._leftSlot);
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
         if (this._unifiedCenterBox) {
             try {
                 this._unifiedCenterBox.remove_style_class_name("dpi-unified-capsule");
+                this._unifiedCenterBox.remove_style_class_name("dpi-capsule-hovered");
+                this._unifiedCenterBox.remove_style_class_name("dpi-capsule-open");
                 this._unifiedCenterBox.remove_style_class_name("dpi-theme-dark");
                 this._unifiedCenterBox.remove_style_class_name("dpi-theme-light");
             } catch (e) {
@@ -469,6 +585,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
         this._taggedClockActors = [];
         this.actor.remove_style_class_name("dpi-standalone-capsule");
+        this.actor.remove_style_class_name("dpi-capsule-hovered");
+        this.actor.remove_style_class_name("dpi-capsule-open");
     }
 
     on_applet_removed_from_panel() {
@@ -496,6 +614,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._idleAttachId);
             this._idleAttachId = 0;
         }
+        if (this._hoverLeaveTimerId) {
+            GLib.source_remove(this._hoverLeaveTimerId);
+            this._hoverLeaveTimerId = 0;
+        }
 
         for (let item of this._themeSignalIds) {
             try {
@@ -507,6 +629,15 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._themeSignalIds = [];
 
         this._detachUnifiedCapsule();
+
+        if (this._leftSlot) {
+            try {
+                this._leftSlot.destroy();
+            } catch (e) {
+                // ignore
+            }
+            this._leftSlot = null;
+        }
 
         if (this.menu) {
             try {
@@ -632,6 +763,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._morphPill.remove_all_transitions();
         this._morphPill.opacity = 0;
         this._morphPill.show();
+        this._syncCapsuleOpenState();
         this._morphPill.ease({
             opacity: 255,
             duration: 240,
@@ -655,6 +787,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             onComplete: () => {
                 if (this._morphPill) {
                     this._morphPill.hide();
+                    this._syncCapsuleOpenState();
                 }
             },
         });
@@ -1005,6 +1138,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         this.menu.connect("open-state-changed", (menu, isOpen) => {
             this._syncSegmentHighlight();
+            this._syncCapsuleOpenState();
             if (isOpen) {
                 this._renderPopover();
             }

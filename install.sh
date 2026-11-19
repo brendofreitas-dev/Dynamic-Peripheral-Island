@@ -93,8 +93,12 @@ if [ -f "${UDEV_SRC}" ]; then
     fi
 fi
 
-# 5. Reload Cinnamon applet via D-Bus
+# 5. Reload Cinnamon applet and theme via D-Bus
 if command -v dbus-send >/dev/null 2>&1 && [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    dbus-send --session --dest=org.Cinnamon --type=method_call \
+        /org/Cinnamon org.Cinnamon.ReloadTheme >/dev/null 2>&1 || true
+    echo "[DPI] Reloaded Cinnamon theme via org.Cinnamon.ReloadTheme."
+
     if dbus-send --session --dest=org.Cinnamon --type=method_call \
         /org/Cinnamon org.Cinnamon.ReloadXlet \
         "string:${APPLET_UUID}" "string:APPLET" >/dev/null 2>&1; then

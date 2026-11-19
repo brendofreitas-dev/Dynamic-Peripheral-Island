@@ -13,7 +13,7 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
 ```text
 +---------------------------------------------------------------------------------------------------+
 |  [ Activities ]       ╭─────────────────────────────────────────────────────────────╮    [Tray]   |
-|                       │ 18:37  |  [Mouse 85%] [Headset 90%]  |  Neon 81% • Swarm 6  │             |
+|                       │ [Mouse 85%] [Headset 90%]  |  18:37  |  Neon 81% • Swarm 6  │             |
 |                       ╰──────────────────────────┬──────────────────────────────────╯             |
 +--------------------------------------------------┼------------------------------------------------+
                                                    ▼  (Clique ou Super + Alt + I)
@@ -31,8 +31,10 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
                         ╰─────────────────────────────────────────────────────────────╯
 ```
 
-- **Segmento Data/Hora**: preserva o `calendar@cinnamon.org` nativo dentro da mesma cápsula visual (`.dpi-unified-capsule`).
+- **Layout Central Balanceado**: organiza os **Periféricos** à esquerda, o relógio do sistema (**Data e Hora** via `calendar@cinnamon.org`) no centro e o monitor de **Antigravity** à direita.
+- **Dynamic Island Hover-Only**: 100% transparente e discreta em repouso; ao passar o cursor sobre a região central ou abrir o menu, revela a cápsula fluida de glassmorphism (`.dpi-capsule-hovered` / `.dpi-capsule-open`), com hover nativo individual do SystemTray (`.applet-box`).
 - **Segmento Periféricos**: exibe dispositivos fixados (`pin_*`) ou ativos; clique abre diretamente a aba **Periféricos**.
+- **Segmento Data/Hora**: preserva o calendário nativo do Cinnamon integrado harmoniosamente à ilha.
 - **Segmento Antigravity**: exibe a cota fixada (`auto` para a menor ou grupo específico) e contador do Swarm; clique abre diretamente a aba **Antigravity VU**.
 - **Morphing Alert Pill**: alertas relevantes (`low_battery`, `device_connected`, `charging_started`, `swarm_active`, `low_quota`) expandem suavemente na TopBar por 4 segundos via `.ease(...)`.
 
@@ -77,7 +79,7 @@ O script `install.sh`:
 2. Instala o applet em `~/.local/share/cinnamon/applets/dynamic-peripheral-island@brendo`.
 3. Registra o applet em `org.cinnamon enabled-applets` na posição `panel2:center:1:dynamic-peripheral-island@brendo:99`.
 4. Instala `/etc/udev/rules.d/99-dynamic-peripheral-island.rules` via `pkexec` (se ainda não existir) e recarrega as regras `udev`.
-5. Recarrega o applet via `dbus-send` (`org.Cinnamon.ReloadXlet`).
+5. Recarrega o tema e o applet via `dbus-send` (`org.Cinnamon.ReloadTheme` e `org.Cinnamon.ReloadXlet`).
 
 ### Atalho Global
 - **`Super + Alt + I`**: abre ou fecha o Popover da Dynamic Peripheral Island a partir de qualquer workspace.

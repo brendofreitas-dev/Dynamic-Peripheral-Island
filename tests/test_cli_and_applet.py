@@ -345,8 +345,23 @@ class TestAppletCssAndDocs(unittest.TestCase):
             "_prewarmPopover",
             'this.actor.remove_style_class_name("applet-box")',
             'style_class: "applet-box dpi-capsule-segment"',
+            "insert_child_below",
+            "_leftSlot",
+            "_updateHoverState",
+            "_syncCapsuleOpenState",
+            "dpi-capsule-hovered",
+            "dpi-capsule-open",
         ):
             self.assertIn(token, src)
+
+        # Left slot insertion on the left of calendarActor and lifecycle cleanup
+        self.assertIn("centerBox.insert_child_below(this._leftSlot, calendarActor)", src)
+        self.assertIn("this._leftSlot.destroy()", src)
+        self.assertIn("this._detachUnifiedCapsule()", src)
+        self.assertIn("leftParent.remove_child(this._leftSlot)", src)
+        self.assertIn('this._unifiedCenterBox.remove_style_class_name("dpi-unified-capsule")', src)
+        self.assertIn('this._unifiedCenterBox.remove_style_class_name("dpi-capsule-hovered")', src)
+        self.assertIn('this._unifiedCenterBox.remove_style_class_name("dpi-capsule-open")', src)
 
         # Segments must use button-press-event (not button-release-event) to precede on_applet_clicked
         self.assertIn('this._segPeripherals.connect("button-press-event"', src)
@@ -386,6 +401,9 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-capsule-segment",
             ".dpi-morph-pill",
             ".dpi-pace-marker",
+            ".dpi-left-slot",
+            ".dpi-capsule-hovered",
+            ".dpi-capsule-open",
         ):
             self.assertIn(required_cls, css)
 
@@ -393,15 +411,33 @@ class TestAppletCssAndDocs(unittest.TestCase):
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)
         self.assertEqual(len(font_families), 0, msg=f"stylesheet.css should not override font-family: {font_families}")
 
-        # No blue pill background rgba(15, 23, 42, 0.84) in CSS
+        # Capsule is transparent in idle (hover-only) and has zero blue background
         self.assertNotIn("rgba(15, 23, 42, 0.84)", css)
+        capsule_idle = re.search(r"\.dpi-unified-capsule\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(capsule_idle)
+        self.assertIn("background-color: transparent;", capsule_idle.group(1))
+        self.assertIn("border-radius: 8px;", capsule_idle.group(1))
+        self.assertNotIn("999px", capsule_idle.group(1))
+        self.assertNotIn("rgba(15, 23, 42", capsule_idle.group(1))
 
-        # Check .dpi-unified-capsule and .dpi-capsule-segment use border-radius: 6px (no 999px pill)
-        capsule_match = re.search(r"\.dpi-unified-capsule\s*\{([^}]+)\}", css)
-        self.assertIsNotNone(capsule_match)
-        self.assertIn("border-radius: 6px;", capsule_match.group(1))
-        self.assertNotIn("999px", capsule_match.group(1))
+        # Both dark and light idle themes for unified capsule must be completely transparent
+        dark_idle = re.search(r"\.dpi-unified-capsule\.dpi-theme-dark\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(dark_idle)
+        self.assertIn("background-color: transparent;", dark_idle.group(1))
+        self.assertNotIn("rgba(15, 23, 42", dark_idle.group(1))
 
+        light_idle = re.search(r"\.dpi-unified-capsule\.dpi-theme-light\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(light_idle)
+        self.assertIn("background-color: transparent;", light_idle.group(1))
+        self.assertNotIn("rgba(15, 23, 42", light_idle.group(1))
+
+        # Hovered and open states must exist and be defined for both dark and light
+        self.assertIn(".dpi-unified-capsule.dpi-theme-dark.dpi-capsule-hovered", css)
+        self.assertIn(".dpi-unified-capsule.dpi-theme-light.dpi-capsule-hovered", css)
+        self.assertIn(".dpi-unified-capsule.dpi-theme-dark.dpi-capsule-open", css)
+        self.assertIn(".dpi-unified-capsule.dpi-theme-light.dpi-capsule-open", css)
+
+        # Segments use 6px radius and transparent background
         segment_match = re.search(r"\.dpi-capsule-segment\s*\{([^}]+)\}", css)
         self.assertIsNotNone(segment_match)
         self.assertIn("border-radius: 6px;", segment_match.group(1))
@@ -451,6 +487,10 @@ class TestAppletCssAndDocs(unittest.TestCase):
             self.assertTrue(os.access(script, os.X_OK), msg=f"{script_name} must be executable")
             proc = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, check=False)
             self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+
+        install_text = (ROOT_DIR / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("org.Cinnamon.ReloadTheme", install_text)
+        self.assertIn("org.Cinnamon.ReloadXlet", install_text)
 
     def test_documentation_and_design_system_files_exist_and_non_empty(self) -> None:
         required_docs = [

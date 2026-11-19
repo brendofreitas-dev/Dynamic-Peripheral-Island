@@ -35,12 +35,12 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
 
 ### 2.1. Evolução do Swarm na v1.0.2 e Agente `docs-git`
 
-Por solicitação direta do usuário, todos os agentes do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), alcançando tempos de resposta inferiores a 1s e integração fluida.
+Por solicitação direta do usuário, todos os workers do Swarm foram migrados para o modelo **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`), enquanto o `coordinator` foi configurado para **Gemini 4 Neon (High)** (`gemini-4-neon-high`).
 Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/docs-git.md`) para centralizar a governança da documentação técnica contínua, auditoria de integridade e geração de commits semânticos no Git (Conventional Commits).
 
 | Agente | Modelo Ativo | Papel Atualizado |
 | :--- | :--- | :--- |
-| `coordinator` | `gemini-flash-worker-agy` | Orquestração do Swarm e alinhamento de entregáveis. |
+| `coordinator` | `Gemini 4 Neon (High)` | Orquestração do Swarm e alinhamento de entregáveis. |
 | `hw-engine` | `Gemini 3.8 Flash (High)` | Drivers de hardware Python stdlib (`src/dpi_core/hardware.py`). |
 | `ag-engine` | `Gemini 3.8 Flash (High)` | Coletor Antigravity ConnectRPC e CLI (`src/dpi_core/antigravity.py`, `cli.py`). |
 | `island-ui` | `Gemini 3.8 Flash (High)` | Applet Cinnamon CJS (`applet.js`, `stylesheet.css`, `metadata.json`). |

@@ -478,14 +478,16 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn('text: "Dynamic Island"', src)
         self.assertIn("Agente Ativo:", src)
 
-        # UX-010 & BUG-007: Antigravity VU 2-column wide layout (720px) without scrollbar and relayout queue
+        # UX-010, UX-014, UX-016: Unified 700px Bento Grid layout across all 4 tabs and GPU-only transitions
         self.assertIn("_syncPopoverWidth()", src)
         self.assertIn("dpi-popover-wide", src)
         self.assertIn("this._scrollView.vscrollbar_policy = St.PolicyType.NEVER", src)
         self.assertIn("this._popoverRoot.queue_relayout()", src)
         self.assertIn("this._scheduleMenuReposition()", src)
-        self.assertIn("style_class: \"dpi-ag-col-left\"", src)
-        self.assertIn("style_class: \"dpi-ag-col-right\"", src)
+        self.assertIn("this._popoverRoot.width = 700;", src)
+        self.assertIn('style_class: "dpi-bento-grid"', src)
+        self.assertIn('style_class: "dpi-bento-col"', src)
+        self.assertIn("PROGRESS_TRACK_WIDTH = 290;", src)
 
         # FEAT-004 & FEAT-005: Audio tab with Volum mixer and Spotify/MPRIS2 media player
         self.assertIn('"audio"', src)
@@ -495,12 +497,11 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_buildAudioMixerCard(", src)
         self.assertIn("_buildPerAppAudioCard(", src)
 
-        # UX-014 & UX-015: LiquidGlass fluid tab switching animation, morphing & EASE_OUT_QUINT
-        self.assertIn("Clutter.AnimationMode.EASE_OUT_QUINT", src)
-        self.assertIn("duration: 420", src)
-        self.assertIn("width: targetW", src)
-        self.assertIn("this.menu.actor.ease({", src)
-        self.assertIn("duration: 300", src)
+        # UX-016: 100% GPU transition (duration: 280, EASE_OUT_CUBIC, opacity: 150) without white flash
+        self.assertIn("Clutter.AnimationMode.EASE_OUT_CUBIC", src)
+        self.assertIn("duration: 280", src)
+        self.assertIn("this._bodyStack.opacity = 150;", src)
+        self.assertIn("this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 110,", src)
 
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
@@ -538,25 +539,36 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-capsule-hovered",
             ".dpi-capsule-open",
             ".dpi-popover-wide",
+            ".dpi-bento-grid",
+            ".dpi-bento-col",
             ".dpi-ag-columns",
             ".dpi-ag-col-left",
             ".dpi-ag-col-right",
         ):
             self.assertIn(required_cls, css)
 
-        # BUG-007: Popover wide width 720px and contained columns 342px
+        # UX-016: Unified 700px Bento Grid layout and 336px columns across all tabs
+        popover_root_block = re.search(r"\.dpi-popover-root\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(popover_root_block)
+        self.assertIn("width: 700px;", popover_root_block.group(1))
+        self.assertIn("max-width: 700px;", popover_root_block.group(1))
+
         popover_wide = re.search(r"\.dpi-popover-root\.dpi-popover-wide\s*\{([^}]+)\}", css)
         self.assertIsNotNone(popover_wide)
-        self.assertIn("width: 720px;", popover_wide.group(1))
-        self.assertIn("max-width: 720px;", popover_wide.group(1))
+        self.assertIn("width: 700px;", popover_wide.group(1))
+        self.assertIn("max-width: 700px;", popover_wide.group(1))
+
+        bento_col = re.search(r"\.dpi-bento-col\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(bento_col)
+        self.assertIn("width: 336px;", bento_col.group(1))
 
         col_left = re.search(r"\.dpi-ag-col-left\s*\{([^}]+)\}", css)
         self.assertIsNotNone(col_left)
-        self.assertIn("width: 342px;", col_left.group(1))
+        self.assertIn("width: 336px;", col_left.group(1))
 
         col_right = re.search(r"\.dpi-ag-col-right\s*\{([^}]+)\}", css)
         self.assertIsNotNone(col_right)
-        self.assertIn("width: 342px;", col_right.group(1))
+        self.assertIn("width: 336px;", col_right.group(1))
 
         # BUG-009: Keyboard LED badges (.dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on)
         self.assertIn(".dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on", css)

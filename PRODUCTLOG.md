@@ -373,6 +373,24 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: asserções de validação para `EASE_OUT_QUINT`, `duration: 420` e `transition-duration: 320ms`.
 - **Validação**: 44/44 testes aprovados, reload no Cinnamon em 309ms com transição perfeitamente sedosa e contínua sem saltos visuais.
 
+### `UX-016` — Bento Grid 2 Colunas Unificado em 700px nas 4 Abas + Transição 100% GPU sem Flash em Branco (`2026-11-20`)
+- **Severidade**: Alta (otimização de renderização, consistência espacial e eliminação de artefatos visuais).
+- **Causa Raiz & Análise Frame-a-Frame**:
+  - A análise de gravação de tela revelou três problemas:
+    1. A interpolação de largura na CPU forçava o compositor Clutter a recalcular o layout de todos os nós a cada frame, gerando jitter e pequenos saltos laterais no popup.
+    2. Iniciar a transição com `opacity = 0` fazia o corpo do Popover piscar em branco por ~200ms antes do fade-in da nova aba.
+    3. Na aba `Áudio`, o layout em coluna única causava corte vertical do mixer de aplicativos e ativava barras de rolagem indesejadas.
+- **Solução Arquitetural**:
+  - Padronização da largura do Popover em **700px fixos** em todas as 4 abas, utilizando Bento Grid de 2 colunas com colunas equilibradas de 336px (`.dpi-bento-col`). Com isso, o Popover permanece imóvel e perfeitamente ancorado ao centro da Ilha Dinâmica, sem qualquer alteração dimensional na CPU.
+  - Na aba `Áudio`, o player Spotify/MPRIS2 e o mixer de apps ficam na coluna esquerda, enquanto Master e Microfone ocupam a coluna direita, eliminando barras de rolagem vertical.
+  - Transição entre abas 100% executada na GPU via `_bodyStack.ease`: início em `opacity: 150` (eliminando completamente o flash em branco), com `scale: 0.99` e `translation_x: dir * 16`, animando para `opacity: 255`, `scale: 1.0` e `translation_x: 0` em `280ms` com `Clutter.AnimationMode.EASE_OUT_CUBIC` a 60 FPS reais.
+  - Debounce de alternância por hover no TabBar estendido para `110ms` (`_tabHoverTimerId`).
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: layout Bento Grid de 2 colunas em todas as 4 abas, remoção da animação de largura/eixo X, transição de GPU sem flash (`opacity: 150`), debounce de hover de 110ms e redimensionamento das barras de progresso para `PROGRESS_TRACK_WIDTH = 290;`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: fixação de `.dpi-popover-root` e `.dpi-popover-wide` em `700px`, e colunas em `336px` (202 regras CSS balanceadas).
+  - `tests/test_cli_and_applet.py`: testes unitários atualizados para `700px`, `280ms`, `EASE_OUT_CUBIC` e `opacity: 150`.
+- **Validação**: 44/44 testes aprovados, recarregamento no Cinnamon via D-Bus em 819ms com zero `JS ERROR` e zero `St-WARNING`.
+
 ---
 
 ## 5. Procedimentos de Rollback

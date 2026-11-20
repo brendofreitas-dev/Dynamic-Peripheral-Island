@@ -5,6 +5,24 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.2] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **UX-016 (Bento Grid 2 Colunas Unificado em 700px nas 4 Abas + Transição 100% GPU sem Flash em Branco)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Padronizada a largura do Popover para 700px fixos em todas as 4 abas (`Periféricos`, `Áudio`, `Antigravity VU`, `Ajustes`), eliminando recálculos contínuos de layout na CPU e mantendo a janela 100% estática e centrada na Ilha sem saltos de largura.
+    - Estruturação consistente em Bento Grid de 2 colunas (`.dpi-bento-grid` com colunas de 336px) em todas as abas:
+      - **Periféricos**: Esquerda (Mouse AJAZZ + Headset Fuxi H3) | Direita (Gamepads GameSir/EasySMX + Teclado Machenike K500).
+      - **Áudio**: Esquerda (Player Spotify/MPRIS2 + Mixer por Aplicativo Volum) | Direita (Saída Master + Microfone).
+      - **Antigravity VU**: Esquerda (Cotas de Modelos) | Direita (Sessão Ativa & Swarm + Histograma 7d & Mensal).
+      - **Ajustes**: Esquerda (Fixar na TopBar + Cota Fixada) | Direita (Limiar de Bateria, Intervalo de Polling e Tema).
+    - Transição entre abas 100% acelerada por GPU em `_bodyStack.ease` (`duration: 280`, `mode: Clutter.AnimationMode.EASE_OUT_CUBIC`), iniciando em `opacity: 150` (eliminando o flash em branco de ~200ms) com `scale: 0.99` e `translation_x: dir * 16`.
+    - Debounce de alternância por hover no TabBar ampliado para 110ms (`_tabHoverTimerId`), evitando ativação acidental de abas ao atravessar o cursor.
+    - Redimensionamento harmonioso das barras de progresso para `PROGRESS_TRACK_WIDTH = 290;` e supressão total de barras de rolagem vertical.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`:
+    - `.dpi-popover-root` e `.dpi-popover-wide` padronizados para `width: 700px; max-width: 700px;`.
+    - Colunas `.dpi-bento-col`, `.dpi-ag-col-left` e `.dpi-ag-col-right` alinhadas para `width: 336px;`.
+
 ## [1.1.1] - 2026-11-20
 
 ### Corrigido / Aprimorado

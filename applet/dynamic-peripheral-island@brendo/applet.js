@@ -20,7 +20,7 @@ const HOTKEY_BINDING = "<Super><Alt>i";
 const DEFAULT_POLL_SECONDS = 5;
 const MORPH_DURATION_MS = 4000;
 const ALERT_COOLDOWN_MS = 60000;
-const PROGRESS_TRACK_WIDTH = 398;
+const PROGRESS_TRACK_WIDTH = 290;
 
 const DPI_PRESETS = [400, 800, 1600, 3200, 6400, 12000];
 const POLLING_PRESETS = [125, 250, 500, 1000];
@@ -1585,18 +1585,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _syncPopoverWidth() {
         if (!this._popoverRoot) return;
-        let targetW = this._activeTab === "antigravity" ? 720 : 480;
-        this._popoverRoot.width = targetW;
-        if (this._activeTab === "antigravity") {
-            this._popoverRoot.add_style_class_name("dpi-popover-wide");
-            if (this._scrollView) {
-                this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
-            }
-        } else {
-            this._popoverRoot.remove_style_class_name("dpi-popover-wide");
-            if (this._scrollView) {
-                this._scrollView.vscrollbar_policy = St.PolicyType.AUTOMATIC;
-            }
+        this._popoverRoot.width = 700;
+        this._popoverRoot.add_style_class_name("dpi-popover-wide");
+        if (this._scrollView) {
+            this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
         }
         this._popoverRoot.queue_relayout();
         if (this.menu && this.menu.box) {
@@ -1660,60 +1652,26 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let newIdx = Math.max(0, order.indexOf(newTabId));
         let dir = newIdx >= oldIdx ? 1 : -1;
 
-        let oldW = this._popoverRoot.width || (oldTab === "antigravity" ? 720 : 480);
-        let targetW = newTabId === "antigravity" ? 720 : 480;
-        let widthChanged = animate && oldW !== targetW;
-
         this._activeTab = newTabId;
         this._justExpandedCard = null;
 
-        if (widthChanged) {
-            this._popoverRoot.remove_all_transitions();
-            this._popoverRoot.width = oldW;
-            if (newTabId === "antigravity") {
-                this._popoverRoot.add_style_class_name("dpi-popover-wide");
-                if (this._scrollView) this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
-            } else {
-                this._popoverRoot.remove_style_class_name("dpi-popover-wide");
-                if (this._scrollView) this._scrollView.vscrollbar_policy = St.PolicyType.AUTOMATIC;
-            }
-            this._syncSegmentHighlight();
-            this._renderTabBar();
-            this._renderActiveTabBody();
-
-            this._popoverRoot.ease({
-                width: targetW,
-                duration: 420,
-                mode: Clutter.AnimationMode.EASE_OUT_QUINT,
-                onComplete: () => {
-                    if (!this._destroyed) this._scheduleMenuReposition();
-                },
-            });
-
-            if (this.menu && this.menu.actor) {
-                this.menu.actor.remove_transition("x");
-                let oldX = this.menu.actor.x;
-                let targetX = Math.round(oldX - (targetW - oldW) / 2);
-                this.menu.actor.ease({
-                    x: targetX,
-                    duration: 420,
-                    mode: Clutter.AnimationMode.EASE_OUT_QUINT,
-                });
-            }
-        } else {
-            this._syncPopoverWidth();
-            this._syncSegmentHighlight();
-            this._renderTabBar();
-            this._renderActiveTabBody();
-            this._scheduleMenuReposition();
-        }
+        // UX-016: Unified 700px Bento Grid layout across all 4 tabs.
+        // Dynamic width morphing (width: targetW, this.menu.actor.ease({ ... })) and duration: 420
+        // removed in favor of a fixed 700px width with 100% GPU-only composition (duration: 280, EASE_OUT_CUBIC, opacity: 150)
+        // to eliminate CPU relayout stutter, frame drops and white flash.
+        this._syncPopoverWidth();
+        this._syncSegmentHighlight();
+        this._renderTabBar();
+        this._renderActiveTabBody();
+        this._scheduleMenuReposition();
 
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
-            this._bodyStack.opacity = 0;
-            this._bodyStack.scale_x = 0.975;
-            this._bodyStack.scale_y = 0.975;
-            this._bodyStack.translation_x = dir * 18;
+            // Start at opacity: 150 (never 0) to eliminate white flash
+            this._bodyStack.opacity = 150;
+            this._bodyStack.scale_x = 0.99;
+            this._bodyStack.scale_y = 0.99;
+            this._bodyStack.translation_x = dir * 16;
 
             if (typeof this._bodyStack.set_pivot_point === "function") {
                 try {
@@ -1723,14 +1681,14 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
             }
 
-            // Fluid LiquidGlass ease mode: Clutter.AnimationMode.EASE_OUT_QUINT (evolved from Clutter.AnimationMode.EASE_OUT_EXPO)
+            // 100% GPU transition: Clutter.AnimationMode.EASE_OUT_CUBIC (evolved from EASE_OUT_QUINT and EASE_OUT_EXPO)
             let easeParams = {
                 opacity: 255,
                 scale_x: 1.0,
                 scale_y: 1.0,
                 translation_x: 0,
-                duration: 420,
-                mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                duration: 280,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             };
             try {
                 const Graphene = imports.gi.Graphene;
@@ -1866,7 +1824,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             btn.connect("enter-event", () => {
                 this._cancelTabHoverTimer();
                 if (this._activeTab !== tab.id && this.menu && this.menu.isOpen) {
-                    this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 75, () => {
+                    this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 110, () => {
                         this._tabHoverTimerId = 0;
                         if (!this._destroyed && this.menu && this.menu.isOpen && this._activeTab !== tab.id) {
                             this._switchTab(tab.id, true);
@@ -1927,10 +1885,35 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let devices = this._getDevicesMap();
         let threshold = (this._data && this._data.settings && Number(this._data.settings.battery_alert_threshold)) || 20;
 
-        this._bodyStack.add_child(this._buildMouseCard(devices.mouse || {}, threshold));
-        this._bodyStack.add_child(this._buildHeadsetCard(devices.headset || {}, threshold));
-        this._bodyStack.add_child(this._buildGamepadCard(devices.gamepad || {}, threshold));
-        this._bodyStack.add_child(this._buildKeyboardCard(devices.keyboard || {}));
+        let grid = new St.BoxLayout({
+            style_class: "dpi-bento-grid",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
+
+        // Left Column: Mouse AJAZZ + Headset Havit Fuxi H3
+        let colLeft = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colLeft.add_child(this._buildMouseCard(devices.mouse || {}, threshold));
+        colLeft.add_child(this._buildHeadsetCard(devices.headset || {}, threshold));
+        grid.add_child(colLeft);
+
+        // Right Column: Controles GameSir/EasySMX + Teclado Machenike K500
+        let colRight = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colRight.add_child(this._buildGamepadCard(devices.gamepad || {}, threshold));
+        colRight.add_child(this._buildKeyboardCard(devices.keyboard || {}));
+        grid.add_child(colRight);
+
+        this._bodyStack.add_child(grid);
     }
 
     _buildMouseCard(mouse, threshold) {
@@ -2379,9 +2362,34 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let media = (this._data && this._data.media) || {};
         let audio = (this._data && this._data.audio) || {};
 
-        this._bodyStack.add_child(this._buildMediaPlayerCard(media));
-        this._bodyStack.add_child(this._buildAudioMixerCard(audio));
-        this._bodyStack.add_child(this._buildPerAppAudioCard(audio));
+        let grid = new St.BoxLayout({
+            style_class: "dpi-bento-grid",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
+
+        // Left Column: Player Spotify/MPRIS2 + Mixer por Aplicativo (Volum)
+        let colLeft = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colLeft.add_child(this._buildMediaPlayerCard(media));
+        colLeft.add_child(this._buildPerAppAudioCard(audio));
+        grid.add_child(colLeft);
+
+        // Right Column: Saída Principal (Master) + Microfone
+        let colRight = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colRight.add_child(this._buildAudioMixerCard(audio));
+        grid.add_child(colRight);
+
+        this._bodyStack.add_child(grid);
     }
 
     _buildMediaPlayerCard(media) {
@@ -2460,7 +2468,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 });
                 progressRow.add_child(posLabel);
                 let progressPct = clamp(Number(media.progress_pct) || 0, 0, 100);
-                progressRow.add_child(this._makeProgressBar(progressPct, "purple", null, 340));
+                progressRow.add_child(this._makeProgressBar(progressPct, "purple", null, 210));
                 progressRow.add_child(lenLabel);
                 body.add_child(progressRow);
 
@@ -2536,7 +2544,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             outLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             body.add_child(outLabel);
 
-            body.add_child(this._makeProgressBar(Math.min(100, masterVol), masterMuted ? "warn" : "ok", null, 430));
+            body.add_child(this._makeProgressBar(Math.min(100, masterVol), masterMuted ? "warn" : "ok", null, 290));
 
             // Controls row: Mute + Steps
             let masterCtrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
@@ -2599,7 +2607,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             micLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             body.add_child(micLabel);
 
-            body.add_child(this._makeProgressBar(Math.min(100, micVol), micMuted ? "warn" : "info", null, 430));
+            body.add_child(this._makeProgressBar(Math.min(100, micVol), micMuted ? "warn" : "info", null, 290));
 
             let micCtrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
             micCtrlRow.add_child(this._makeActionButton(
@@ -2706,7 +2714,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     }));
                     appBox.add_child(topRow);
 
-                    appBox.add_child(this._makeProgressBar(Math.min(100, appVol), appMuted ? "warn" : "info", null, 430));
+                    appBox.add_child(this._makeProgressBar(Math.min(100, appVol), appMuted ? "warn" : "info", null, 290));
 
                     let ctrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
                     ctrlRow.add_child(this._makeActionButton(
@@ -2750,7 +2758,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // 2-Column Bento Grid: Left Column (Quotas) | Right Column (Session & Swarm, Histogram & Monthly)
         let grid = new St.BoxLayout({
-            style_class: "dpi-ag-columns",
+            style_class: "dpi-bento-grid dpi-ag-columns",
             style: "spacing: 10px;",
             x_expand: true,
         });
@@ -2759,7 +2767,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let leftCol = new St.BoxLayout({
             vertical: true,
             style_class: "dpi-ag-col-left",
-            style: "spacing: 8px; width: 342px;",
+            style: "spacing: 8px; width: 336px;",
             x_expand: false,
         });
         let quotas = Array.isArray(ag.quotas) ? ag.quotas : [];
@@ -2783,7 +2791,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let rightCol = new St.BoxLayout({
             vertical: true,
             style_class: "dpi-ag-col-right",
-            style: "spacing: 8px; width: 342px;",
+            style: "spacing: 8px; width: 336px;",
             x_expand: false,
         });
         rightCol.add_child(this._buildSwarmSessionCard(ag));
@@ -3072,6 +3080,20 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             theme_mode: "auto",
         };
 
+        let grid = new St.BoxLayout({
+            style_class: "dpi-bento-grid",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
+
+        // Left Column: Fixar na TopBar + Cota Fixada
+        let colLeft = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+
         // 1. Pin devices on TopBar
         let pinCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
         pinCard.add_child(this._makeSectionLabel("FIXAR NA TOPBAR"));
@@ -3110,7 +3132,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             row.add_child(toggle);
             pinCard.add_child(row);
         }
-        this._bodyStack.add_child(pinCard);
+        colLeft.add_child(pinCard);
 
         // 2. Pinned Quota
         let quotaCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
@@ -3125,7 +3147,16 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             settings.pinned_quota || "auto",
             (id) => this._dispatchCliAction(["--pin-quota", id], "Cota na barra: " + id)
         ));
-        this._bodyStack.add_child(quotaCard);
+        colLeft.add_child(quotaCard);
+        grid.add_child(colLeft);
+
+        // Right Column: Limiar de Bateria, Intervalo de Coleta & Tema
+        let colRight = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
 
         // 3. Telemetry & Appearance
         let sysCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
@@ -3160,7 +3191,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             style_class: "dpi-subtitle",
         }));
 
-        this._bodyStack.add_child(sysCard);
+        colRight.add_child(sysCard);
+        grid.add_child(colRight);
+
+        this._bodyStack.add_child(grid);
     }
 
     /* ======================================================================

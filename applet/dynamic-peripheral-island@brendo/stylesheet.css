@@ -319,8 +319,8 @@
  * ========================================================================== */
 
 .dpi-popover-root {
-    width: 480px;
-    max-width: 480px;
+    width: 700px;
+    max-width: 700px;
     background-color: transparent;
     border: none;
     box-shadow: none;
@@ -330,8 +330,17 @@
 }
 
 .dpi-popover-root.dpi-popover-wide {
-    width: 720px;
-    max-width: 720px;
+    width: 700px;
+    max-width: 700px;
+}
+
+.dpi-bento-grid {
+    spacing: 10px;
+}
+
+.dpi-bento-col {
+    width: 336px;
+    spacing: 8px;
 }
 
 .dpi-ag-columns {
@@ -339,11 +348,11 @@
 }
 
 .dpi-ag-col-left {
-    width: 342px;
+    width: 336px;
 }
 
 .dpi-ag-col-right {
-    width: 342px;
+    width: 336px;
 }
 
 .dpi-popover-root.dpi-theme-dark {

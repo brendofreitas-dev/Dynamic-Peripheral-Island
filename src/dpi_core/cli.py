@@ -116,8 +116,15 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
 
     low_battery = isinstance(battery, (int, float)) and connected and battery <= threshold
     critical_battery = isinstance(battery, (int, float)) and connected and battery <= 10
+    power_state = None
     if key == "mouse":
-        visible = pinned or (connected and active) or charging or low_battery
+        power_state = str(
+            dev.get("power_state")
+            or ("active" if active else ("sleep" if dev.get("standby") else "off"))
+        )
+        if not connected:
+            power_state = "off"
+        visible = (power_state != "off")
     elif key == "headset":
         visible = bool(connected and active)
     elif key == "gamepad":
@@ -125,17 +132,31 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
     else:  # keyboard
         visible = pinned
 
+    dev_icon = meta["icon"]
+
     if not connected:
         status_text = "Off"
         detail_text = "Desconectado"
+        if key == "mouse":
+            dev_icon = "input-mouse-symbolic"
     elif key == "mouse":
-        bat_str = f"{int(battery)}%" if isinstance(battery, (int, float)) else "--"
-        if dev.get("standby"):
-            bat_str = f"{bat_str} (Sleep)" if isinstance(battery, (int, float)) else "Standby"
-        status_text = f"{int(battery)}%+" if (charging and isinstance(battery, (int, float))) else bat_str
-        dpi = dev.get("current_dpi") or "--"
+        has_bat = isinstance(battery, (int, float))
+        bat_str = f"{int(battery)}%" if has_bat else "--"
+        dpi = dev.get("current_dpi") or dev.get("dpi") or "--"
         hz = dev.get("polling_rate") or "--"
-        detail_text = f"{dpi} DPI · {hz}Hz"
+
+        if power_state == "active":
+            dev_icon = "battery-full-charging-symbolic" if charging else "input-mouse-symbolic"
+            status_text = f"{int(battery)}%+" if (charging and has_bat) else (bat_str if has_bat else "On")
+            detail_text = f"{dpi} DPI · {hz}Hz"
+        elif power_state == "sleep":
+            dev_icon = "dpi-mouse-sleep-symbolic"
+            status_text = bat_str if has_bat else "Descanso"
+            detail_text = f"Modo de Descanso (Sleep) · {dpi} DPI · {hz}Hz"
+        else:  # off
+            dev_icon = "input-mouse-symbolic"
+            status_text = "Off"
+            detail_text = "Desligado"
     elif key == "headset":
         vol = dev.get("volume")
         muted = bool(dev.get("muted", False))
@@ -189,11 +210,14 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
     elif low_battery:
         level = "warning"
 
+    if key == "mouse" and power_state == "sleep":
+        level = "muted"
+
     res = {
         "key": key,
         "name": str(dev.get("name") or meta["name"]),
         "short_name": meta["short"],
-        "icon": meta["icon"],
+        "icon": dev_icon,
         "connected": connected,
         "active": active,
         "pinned": pinned,
@@ -205,6 +229,8 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         "detail_text": detail_text,
         "level": level,
     }
+    if key == "mouse":
+        res["power_state"] = power_state
     if key == "headset":
         res["volume"] = dev.get("volume")
         res["muted"] = bool(dev.get("muted", False))
@@ -329,7 +355,17 @@ def format_waybar(payload: Dict[str, Any]) -> str:
 
     tooltip_lines: List[str] = ["Dynamic Peripheral Island", ""]
     for p in capsule.get("peripherals") or []:
-        if p.get("key") == "headset":
+        if p.get("key") == "mouse":
+            m_pstate = p.get("power_state")
+            bat = p.get("battery")
+            bat_str = f" — Bateria: {int(bat)}%" if isinstance(bat, (int, float)) else ""
+            if m_pstate == "sleep":
+                tooltip_lines.append(f"{p['name']} (Modo de Descanso (Sleep)){bat_str}")
+            elif m_pstate == "off" or not p.get("connected"):
+                tooltip_lines.append(f"{p['name']}: Off (Desconectado)")
+            else:
+                tooltip_lines.append(f"{p['name']}: {p['status_text']} ({p['detail_text']})")
+        elif p.get("key") == "headset":
             conn = p.get("connection_type") or "2.4GHz"
             vol = p.get("volume")
             muted = p.get("muted", False)

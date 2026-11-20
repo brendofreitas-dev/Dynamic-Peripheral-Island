@@ -285,6 +285,48 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_antigravity.py`: novo teste unitário `test_swarm_subagent_idle_vs_working_states_bug_008` validando a transição determinística para `IDLE` e `WORKING`.
 - **Validação**: 35/35 testes unitários aprovados e contagem exata de agentes ativos no Swarm verificada em runtime real via `dpi-hub --island-json`.
 
+### `FEAT-003` / `BUG-010` — Gestão Determinística de Estados do Mouse AJAZZ AJ179 V2 (`active` / `sleep` / `off`) (`2026-11-20`)
+- **Severidade**: Média (precisão no status de conectividade do mouse e limpeza visual da TopBar).
+- **Causa & Racional Técnico**:
+  - Quando o mouse sem fio AJAZZ entra em standby ou é desligado fisicamente, o dongle 2.4GHz USB (`249a:5c2f`) permanece conectado ao PC. O driver anterior mantinha o mouse visível como conectado com status residual.
+  - No frame de resposta `CMD_INFO` (`0x10`), o byte 14 indica se o rádio do sensor está online (`0x01`) ou offline (`0x00`).
+  - Foi implementado um modelo de 3 estados de energia: `active` (quando `live_ok = True` e online), `sleep` (quando offline por até 180s, indicando modo de descanso) e `off` (quando offline por mais de 180s ou com o dongle desconectado).
+- **Arquivos Modificados**:
+  - `src/dpi_core/hardware.py`: persistência de `offline_since` em `mouse_state.json`; cálculo de `power_state` em `AjazzMouseDriver.read_state()` mantendo 100% de leitura passiva e zero escritas HID (`safe_mode`).
+  - `applet/dynamic-peripheral-island@brendo/icons/dpi-mouse-sleep-symbolic.svg`: novo ícone vetorial SVG simbolizando modo de descanso.
+  - `src/dpi_core/cli.py` e `applet/dynamic-peripheral-island@brendo/applet.js`: ocultação automática na TopBar (`visible = False`) quando `power_state == "off"`; exibição com ícone de repouso e tom suave (`muted`) quando em `sleep`.
+  - `tests/test_hardware.py` e `tests/test_cli_and_applet.py`: testes unitários adicionados cobrindo os 3 estados.
+- **Validação**: Testes unitários aprovados e comportamento em runtime validado ao vivo.
+
+### `BUG-009` — Visibilidade dos Badges de LEDs do Teclado K500 & Fallback Passivo (`2026-11-20`)
+- **Severidade**: Baixa (estética e feedback de digitação).
+- **Causa Raiz**:
+  1. A regra CSS `.dpi-theme-dark .dpi-kbd-badge` possuía especificidade superior (0,2,0) em relação a `.dpi-kbd-badge-on` (0,1,0), sobrescrevendo a cor de ativação e fazendo com que os badges `CAPS`, `NUM` e `SCROLL` permanecessem apagados mesmo quando a tecla estava ligada.
+  2. Em algumas distribuições ou sessões X11 sem nós sysfs mapeados para LEDs, a leitura retornava sempre desligada.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: adição das regras `.dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on` e `.dpi-theme-light .dpi-kbd-badge.dpi-kbd-badge-on` com destaque vibrante.
+  - `src/dpi_core/hardware.py`: adição de `_read_leds_from_xset()` utilizando `xset q` (LED mask) como fallback seguro e passivo (100% Safe Mode).
+  - `tests/test_cli_and_applet.py` e `tests/test_hardware.py`: testes cobrindo a especificidade CSS e o fallback do `xset q`.
+- **Validação**: 37/37 testes aprovados e badge de `NUML` acendendo claramente no Popover.
+
+### `UX-012` — Popover Sempre Centralizado na TopBar (`2026-11-20`)
+- **Severidade**: Baixa (alinhamento visual e previsibilidade espacial da interface).
+- **Causa Raiz**:
+  - A troca dinâmica de `sourceActor` para `_segPeripherals` ou `_segAntigravity` fazia com que o Popover mudasse sua posição horizontal dependendo do segmento clicado.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: fixação de `this.menu.sourceActor` exclusivamente no centro da ilha (`_unifiedCenterBox || _calendarActor || actor`), garantindo ancoragem estável no centro do painel superior.
+  - `tests/test_cli_and_applet.py`: asserção validando a fixação de `sourceActor`.
+- **Validação**: Abertura do Popover rigorosamente centralizada em todos os cliques e hovers.
+
+### `UX-013` — Sincronização Tipográfica Dinâmica na TopBar (`2026-11-20`)
+- **Severidade**: Baixa (conformidade com configurações de acessibilidade e fontes do sistema).
+- **Causa Raiz**:
+  - O tamanho fixo de `font-size: 11px;` impedia que os rótulos da TopBar acompanhassem alterações na escala de fontes do painel e do relógio nativo (`calendar@cinnamon.org`).
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: substituição por `font-size: 1em;` em `.dpi-pill-text` e `.dpi-morph-text`.
+  - `tests/test_cli_and_applet.py`: teste validando o uso de `1em`.
+- **Validação**: Herança perfeita do dimensionamento da fonte em runtime no Cinnamon.
+
 ---
 
 ## 5. Procedimentos de Rollback

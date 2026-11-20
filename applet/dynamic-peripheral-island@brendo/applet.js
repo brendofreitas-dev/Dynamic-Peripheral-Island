@@ -384,9 +384,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _makeDeviceIcon(iconName, styleClass, size) {
-        let isGamepad = iconName === "dpi-gamepad-symbolic" || iconName === "input-gaming-symbolic";
-        if (isGamepad && this._meta && this._meta.path) {
-            let svgPath = GLib.build_filenamev([this._meta.path, "icons", "dpi-gamepad-symbolic.svg"]);
+        if (iconName && iconName.startsWith("dpi-") && this._meta && this._meta.path) {
+            let svgPath = GLib.build_filenamev([this._meta.path, "icons", iconName + ".svg"]);
             if (GLib.file_test(svgPath, GLib.FileTest.EXISTS)) {
                 let iconProps = {
                     gicon: Gio.icon_new_for_string(svgPath),
@@ -397,8 +396,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 return new St.Icon(iconProps);
             }
         }
+        let fallbackName = iconName;
+        if (iconName === "dpi-gamepad-symbolic") fallbackName = "input-gaming-symbolic";
+        else if (iconName === "dpi-mouse-sleep-symbolic") fallbackName = "input-mouse-symbolic";
+
         let iconProps = {
-            icon_name: iconName === "dpi-gamepad-symbolic" ? "input-gaming-symbolic" : iconName,
+            icon_name: fallbackName,
             icon_type: St.IconType.SYMBOLIC,
             style_class: styleClass || "dpi-pill-icon",
         };
@@ -871,9 +874,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _switchTabFromTopBarHover(tabName) {
         if (!this.menu || !this.menu.isOpen) return;
-        this.menu.sourceActor = (tabName === "peripherals" && this._segPeripherals)
-            ? this._segPeripherals
-            : (this._segAntigravity || this.actor);
+        this.menu.sourceActor = this._unifiedCenterBox || this._calendarActor || this.actor;
         this._switchTab(tabName, true);
         if (typeof this.menu._reposition === "function") {
             try {
@@ -915,9 +916,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             this.menu.close(true);
             return;
         }
-        this.menu.sourceActor = (tabName === "peripherals" && this._segPeripherals)
-            ? this._segPeripherals
-            : (this._segAntigravity || this.actor);
+        this.menu.sourceActor = this._unifiedCenterBox || this._calendarActor || this.actor;
         if (this.menu.isOpen) {
             this._switchTab(tabName, true);
         } else {
@@ -930,6 +929,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _toggleIsland() {
         if (!this.menu) return;
+        this.menu.sourceActor = this._unifiedCenterBox || this._calendarActor || this.actor;
         if (this.menu.isOpen) {
             this.menu.close(true);
         } else {
@@ -1249,12 +1249,24 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 let tooltipText = "";
                 if (p.key === "mouse") {
                     let m = peripherals.mouse || {};
-                    let conn = m.connection_type || p.connection_type || "2.4GHz";
-                    tooltipText = (m.name || "AJAZZ AJ179 V2") + " · " + conn;
-                    let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : m.battery;
-                    if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
-                    if (m.current_dpi) tooltipText += " · " + m.current_dpi + " DPI";
-                    else if (m.dpi) tooltipText += " · " + m.dpi + " DPI";
+                    let pState = p.power_state || m.power_state || (m.connected && !m.standby ? "active" : (m.standby ? "sleep" : "off"));
+                    if (pState === "off" || (!p.connected && !p.active && !m.connected)) {
+                        continue;
+                    }
+                    if (pState === "sleep") {
+                        icon = "dpi-mouse-sleep-symbolic";
+                        tone = "muted";
+                        let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : m.battery;
+                        text = (p.status_text && p.status_text !== "Off") ? p.status_text : (bat !== null && bat !== undefined ? bat + "%" : "Descanso");
+                        tooltipText = (m.name || "AJAZZ AJ179 V2") + " · Modo de Descanso (Sleep)" + (bat !== null && bat !== undefined ? " · Última bateria: " + bat + "%" : "");
+                    } else {
+                        let conn = m.connection_type || p.connection_type || "2.4GHz";
+                        tooltipText = (m.name || "AJAZZ AJ179 V2") + " · " + conn;
+                        let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : m.battery;
+                        if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
+                        if (m.current_dpi) tooltipText += " · " + m.current_dpi + " DPI";
+                        else if (m.dpi) tooltipText += " · " + m.dpi + " DPI";
+                    }
                 } else if (p.key === "headset") {
                     if (!p.active) continue;
                     let h = peripherals.headset || {};
@@ -1297,17 +1309,27 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             }
         } else {
             let mouse = peripherals.mouse || {};
-            let showMouse = settings.pin_mouse !== false || (mouse.connected && !mouse.standby);
+            let mPower = mouse.power_state || (mouse.connected && !mouse.standby ? "active" : (mouse.standby ? "sleep" : "off"));
+            let showMouse = settings.pin_mouse !== false && mPower !== "off" && (mouse.connected || mPower === "sleep");
             if (showMouse) {
                 let bat = mouse.battery;
-                let text = mouse.connected
-                    ? (bat !== null && bat !== undefined ? bat + "%" : (mouse.standby ? "Standby" : "OK"))
-                    : "OFF";
-                let tone = !mouse.connected ? "muted" : (mouse.charging ? "ok" : pctSeverityClass(bat, threshold));
-                let icon = mouse.charging ? "battery-full-charging-symbolic" : "input-mouse-symbolic";
-                let tip = (mouse.name || "AJAZZ AJ179 V2") + " · " + (mouse.connection_type || "2.4GHz");
-                if (bat !== null && bat !== undefined) tip += " · Bateria " + bat + "%";
-                if (mouse.current_dpi || mouse.dpi) tip += " · " + (mouse.current_dpi || mouse.dpi) + " DPI";
+                let text = "";
+                let icon = "";
+                let tone = "";
+                let tip = "";
+                if (mPower === "sleep") {
+                    icon = "dpi-mouse-sleep-symbolic";
+                    text = bat !== null && bat !== undefined ? bat + "%" : "Descanso";
+                    tone = "muted";
+                    tip = (mouse.name || "AJAZZ AJ179 V2") + " · Modo de Descanso (Sleep)" + (bat !== null && bat !== undefined ? " · Última bateria: " + bat + "%" : "");
+                } else {
+                    icon = mouse.charging ? "battery-full-charging-symbolic" : "input-mouse-symbolic";
+                    text = bat !== null && bat !== undefined ? (mouse.charging ? bat + "%+" : bat + "%") : "OK";
+                    tone = mouse.charging ? "ok" : pctSeverityClass(bat, threshold);
+                    tip = (mouse.name || "AJAZZ AJ179 V2") + " · " + (mouse.connection_type || "2.4GHz");
+                    if (bat !== null && bat !== undefined) tip += " · Bateria " + bat + "%";
+                    if (mouse.current_dpi || mouse.dpi) tip += " · " + (mouse.current_dpi || mouse.dpi) + " DPI";
+                }
                 this._segPeripherals.add_child(this._makePillItem(icon, text, tone, null, tip));
                 pillCount++;
             }
@@ -1833,17 +1855,41 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let expanded = Boolean(this._expandedCards.mouse);
         let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
 
+        let pState = mouse.power_state || (mouse.connected && !mouse.standby ? "active" : (mouse.standby ? "sleep" : "off"));
         let connType = mouse.connection_type || (mouse.connected ? "2.4GHz" : "Desconectado");
         let bat = mouse.battery;
-        let batLabel = bat !== null && bat !== undefined ? bat + "%" : (mouse.standby ? "Standby" : "--");
-        let tone = !mouse.connected ? "muted" : (mouse.charging ? "ok" : pctSeverityClass(bat, threshold));
+        let batLabel = bat !== null && bat !== undefined ? bat + "%" : (pState === "sleep" ? "Descanso" : (pState === "off" ? "Off" : "--"));
+        let tone = pState === "off" ? "muted" : (mouse.charging ? "ok" : (pState === "sleep" ? "warn" : pctSeverityClass(bat, threshold)));
+
+        let iconName = "input-mouse-symbolic";
+        if (mouse.charging) {
+            iconName = "battery-full-charging-symbolic";
+        } else if (pState === "sleep") {
+            iconName = "dpi-mouse-sleep-symbolic";
+        }
+
+        let badgeText = connType;
+        let badgeTone = "muted";
+        if (mouse.charging) {
+            badgeText = connType + " / Chg";
+            badgeTone = "ok";
+        } else if (pState === "sleep") {
+            badgeText = "Descanso";
+            badgeTone = "warn";
+        } else if (pState === "off") {
+            badgeText = "Desligado";
+            badgeTone = "muted";
+        } else if (mouse.connected) {
+            badgeText = connType;
+            badgeTone = "info";
+        }
 
         let header = this._buildCardHeader({
             cardKey: "mouse",
-            icon: "input-mouse-symbolic",
+            icon: iconName,
             title: "AJAZZ AJ179 V2",
-            badgeText: mouse.charging ? connType + " / Chg" : connType,
-            badgeTone: mouse.connected ? (mouse.standby ? "warn" : "info") : "muted",
+            badgeText: badgeText,
+            badgeTone: badgeTone,
             metricText: batLabel,
             metricTone: tone,
             expanded: expanded,

@@ -377,6 +377,11 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("this._segPeripherals.contains(src)", src)
         self.assertIn("this.menu.sourceActor =", src)
         self.assertIn("this.menu.sourceActor = this.actor;", src)
+        # UX-012: Popover always centered in middle of TopBar island
+        self.assertIn("this.menu.sourceActor = this._unifiedCenterBox || this._calendarActor || this.actor;", src)
+
+        # FEAT-003: Mouse sleep symbolic icon reference
+        self.assertIn("dpi-mouse-sleep-symbolic", src)
 
         # No vertical pipe divider on TopBar
         self.assertIn("this._midDivider.hide();", src)
@@ -482,6 +487,19 @@ class TestAppletCssAndDocs(unittest.TestCase):
         col_right = re.search(r"\.dpi-ag-col-right\s*\{([^}]+)\}", css)
         self.assertIsNotNone(col_right)
         self.assertIn("width: 342px;", col_right.group(1))
+
+        # BUG-009: Keyboard LED badges (.dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on)
+        self.assertIn(".dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on", css)
+        self.assertIn(".dpi-theme-light .dpi-kbd-badge.dpi-kbd-badge-on", css)
+
+        # UX-013: TopBar pills scale dynamically with system font (1em)
+        pill_text = re.search(r"\.dpi-pill-text\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(pill_text)
+        self.assertIn("font-size: 1em;", pill_text.group(1))
+
+        morph_text = re.search(r"\.dpi-morph-text\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(morph_text)
+        self.assertIn("font-size: 1em;", morph_text.group(1))
 
         # Zero font-family overrides (inherits system font, e.g. Lexend 10)
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)
@@ -757,6 +775,69 @@ class TestAppletCssAndDocs(unittest.TestCase):
             hs_periph_24_mute = {p["key"]: p for p in data_hs_24_mute["capsule"]["peripherals"]}["headset"]
             self.assertEqual(hs_periph_24_mute["status_text"], "Mudo")
 
+            # FEAT-003 & BUG-010: Mouse power states (active, sleep, off)
+            hw_mouse = _mock_hw_manager()
+            # Sleep mode (standby=True, power_state="sleep")
+            hw_mouse.get_all_peripherals_snapshot.return_value["devices"]["mouse"] = {
+                "id": "ajazz_aj179_v2",
+                "name": "AJAZZ AJ179 V2",
+                "connected": True,
+                "active": False,
+                "standby": True,
+                "power_state": "sleep",
+                "battery": 45,
+                "charging": False,
+                "connection_type": "Descanso",
+                "current_dpi": 950,
+                "polling_rate": 1000,
+            }
+            buf_m_sleep = io.StringIO()
+            with contextlib.redirect_stdout(buf_m_sleep):
+                rc_m_sleep = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_mouse,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_m_sleep, 0)
+            data_m_sleep = json.loads(buf_m_sleep.getvalue())
+            m_periph_sleep = {p["key"]: p for p in data_m_sleep["capsule"]["peripherals"]}["mouse"]
+            self.assertTrue(m_periph_sleep["visible"])
+            self.assertEqual(m_periph_sleep["power_state"], "sleep")
+            self.assertEqual(m_periph_sleep["icon"], "dpi-mouse-sleep-symbolic")
+            self.assertEqual(m_periph_sleep["level"], "muted")
+            self.assertEqual(m_periph_sleep["status_text"], "45%")
+            self.assertIn("Modo de Descanso (Sleep)", m_periph_sleep["detail_text"])
+
+            buf_m_wb = io.StringIO()
+            with contextlib.redirect_stdout(buf_m_wb):
+                cli.main(
+                    argv=["--waybar"],
+                    hw_manager=hw_mouse,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            wb_mouse = json.loads(buf_m_wb.getvalue())
+            self.assertIn("AJAZZ AJ179 V2 (Modo de Descanso (Sleep)) — Bateria: 45%", wb_mouse["tooltip"])
+
+            # Off mode (power_state="off") -> visible=False on TopBar
+            hw_mouse.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["power_state"] = "off"
+            hw_mouse.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["active"] = False
+            hw_mouse.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["standby"] = False
+            buf_m_off = io.StringIO()
+            with contextlib.redirect_stdout(buf_m_off):
+                rc_m_off = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_mouse,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_m_off, 0)
+            data_m_off = json.loads(buf_m_off.getvalue())
+            m_periph_off = {p["key"]: p for p in data_m_off["capsule"]["peripherals"]}["mouse"]
+            self.assertFalse(m_periph_off["visible"])
+            self.assertEqual(m_periph_off["power_state"], "off")
+
     def test_install_and_uninstall_scripts_syntax(self) -> None:
         for script_name in ("install.sh", "uninstall.sh"):
             script = ROOT_DIR / script_name
@@ -783,6 +864,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             "design-system/dynamic-peripheral-island/tokens.json",
             "design-system/dynamic-peripheral-island/tokens.css",
             "applet/dynamic-peripheral-island@brendo/icons/dpi-gamepad-symbolic.svg",
+            "applet/dynamic-peripheral-island@brendo/icons/dpi-mouse-sleep-symbolic.svg",
             "udev/99-dynamic-peripheral-island.rules",
             "LICENSE",
             ".gitignore",
@@ -793,12 +875,13 @@ class TestAppletCssAndDocs(unittest.TestCase):
             content = p.read_text(encoding="utf-8").strip()
             self.assertGreater(len(content), 20, msg=f"File appears empty/trivial: {rel}")
 
-        # Validate SVG XML structure
-        svg_path = ROOT_DIR / "applet" / "dynamic-peripheral-island@brendo" / "icons" / "dpi-gamepad-symbolic.svg"
-        tree = ET.parse(str(svg_path))
-        root = tree.getroot()
-        self.assertTrue(root.tag.endswith("svg"))
-        self.assertEqual(root.attrib.get("viewBox"), "0 0 16 16")
+        # Validate SVG XML structure for custom symbolic icons
+        for svg_name in ("dpi-gamepad-symbolic.svg", "dpi-mouse-sleep-symbolic.svg"):
+            svg_path = ROOT_DIR / "applet" / "dynamic-peripheral-island@brendo" / "icons" / svg_name
+            tree = ET.parse(str(svg_path))
+            root = tree.getroot()
+            self.assertTrue(root.tag.endswith("svg"), msg=f"{svg_name} must have svg root tag")
+            self.assertEqual(root.attrib.get("viewBox"), "0 0 16 16", msg=f"{svg_name} must have 16x16 viewBox")
 
 
 if __name__ == "__main__":

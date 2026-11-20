@@ -142,6 +142,7 @@ class TestAjazzMouseDriver(unittest.TestCase):
             info_frame[3] = 0x0B
             info_frame[12] = 0x00  # not charging
             info_frame[13] = 78    # 78%
+            info_frame[14] = 0x01  # online byte
 
             dpi_frame = bytearray(32)
             dpi_frame[0] = driver.CMD_DPI_READ
@@ -200,6 +201,7 @@ class TestAjazzMouseDriver(unittest.TestCase):
 
             self.assertTrue(live["connected"])
             self.assertTrue(live["active"])
+            self.assertEqual(live["power_state"], "active")
             self.assertFalse(live["standby"])
             self.assertFalse(live["cached"])
             self.assertEqual(live["battery"], 78)
@@ -224,12 +226,102 @@ class TestAjazzMouseDriver(unittest.TestCase):
 
             self.assertTrue(standby_state["connected"])
             self.assertFalse(standby_state["active"])
+            self.assertEqual(standby_state["power_state"], "sleep")
             self.assertTrue(standby_state["standby"])
             self.assertTrue(standby_state["cached"])
-            self.assertEqual(standby_state["connection_type"], "Standby")
+            self.assertEqual(standby_state["connection_type"], "Descanso")
             self.assertEqual(standby_state["battery"], 78)
             self.assertEqual(standby_state["current_dpi"], 3200)
             self.assertEqual(standby_state["polling_rate"], 500)
+
+    def test_ajazz_power_states_active_sleep_off_feat_003_bug_010(self) -> None:
+        """FEAT-003 / BUG-010: AJAZZ AJ179 V2 power states (active, sleep <= 180s, off > 180s, disconnected)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            power_root = root / "power"
+            cache_path = root / "mouse_state.json"
+
+            _make_fake_hidraw_node(
+                hidraw_root,
+                "hidraw1",
+                "249a",
+                "5c2f",
+                hid_name="AJAZZ AJ179 V2 Wireless Receiver",
+                has_input=False,
+                report_descriptor=b"\x06\x00\xff\x95\x20",
+            )
+
+            driver = AjazzMouseDriver(
+                cache_path=cache_path,
+                hidraw_root=hidraw_root,
+                power_supply_root=power_root,
+            )
+
+            # 1. Active: info_resp[14] == 0x01
+            info_live = bytearray(32)
+            info_live[0] = driver.CMD_INFO
+            info_live[1] = 0x00
+            info_live[2] = 0x01
+            info_live[3] = 0x0B
+            info_live[12] = 0x00  # discharging
+            info_live[13] = 65    # 65%
+            info_live[14] = 0x01  # online byte = 1
+
+            with mock.patch.object(driver, "_hid_exchange", side_effect=lambda dev, cmd, write=False, **kw: bytes(info_live) if cmd == driver.CMD_INFO else None):
+                st_active = driver.read_state()
+
+            self.assertTrue(st_active["connected"])
+            self.assertTrue(st_active["active"])
+            self.assertEqual(st_active["power_state"], "active")
+            self.assertFalse(st_active["standby"])
+            self.assertFalse(st_active["cached"])
+            self.assertEqual(st_active["battery"], 65)
+            self.assertEqual(st_active["connection_type"], "2.4GHz")
+            self.assertIsNone(st_active["offline_since"])
+
+            # 2. Sleep within 180s: info_resp[14] == 0x00 (radio sleeping)
+            info_sleep = bytearray(info_live)
+            info_sleep[14] = 0x00  # online byte = 0
+
+            with mock.patch.object(driver, "_hid_exchange", side_effect=lambda dev, cmd, write=False, **kw: bytes(info_sleep) if cmd == driver.CMD_INFO else None), \
+                 mock.patch("dpi_core.hardware.time.time", return_value=1000.0):
+                st_sleep = driver.read_state()
+
+            self.assertTrue(st_sleep["connected"])
+            self.assertFalse(st_sleep["active"])
+            self.assertEqual(st_sleep["power_state"], "sleep")
+            self.assertTrue(st_sleep["standby"])
+            self.assertTrue(st_sleep["cached"])
+            self.assertEqual(st_sleep["connection_type"], "Descanso")
+            self.assertEqual(st_sleep["battery"], 65)
+            self.assertEqual(st_sleep["offline_since"], 1000)
+
+            # 3. Off after 180s (> 180s, e.g. at time=1250 with offline_since=1000 -> elapsed 250s)
+            with mock.patch.object(driver, "_hid_exchange", side_effect=lambda dev, cmd, write=False, **kw: bytes(info_sleep) if cmd == driver.CMD_INFO else None), \
+                 mock.patch("dpi_core.hardware.time.time", return_value=1250.0):
+                st_off = driver.read_state()
+
+            self.assertTrue(st_off["connected"])
+            self.assertFalse(st_off["active"])
+            self.assertEqual(st_off["power_state"], "off")
+            self.assertFalse(st_off["standby"])
+            self.assertTrue(st_off["cached"])
+            self.assertEqual(st_off["connection_type"], "Desligado")
+            self.assertEqual(st_off["battery"], 65)
+
+            # 4. Disconnected (dongle unplugged / node is None)
+            driver_empty = AjazzMouseDriver(
+                cache_path=cache_path,
+                hidraw_root=root / "nonexistent",
+                power_supply_root=power_root,
+            )
+            st_disconn = driver_empty.read_state()
+            self.assertFalse(st_disconn["connected"])
+            self.assertFalse(st_disconn["active"])
+            self.assertEqual(st_disconn["power_state"], "off")
+            self.assertFalse(st_disconn["standby"])
+            self.assertEqual(st_disconn["connection_type"], "Disconnected")
 
     def test_read_state_never_sends_write_opcodes(self) -> None:
         """BUG-001 safety regression guard: read_state() must NEVER send write opcodes (0x02..0x09)."""
@@ -716,6 +808,37 @@ class TestK500KeyboardDriverSafeMode(unittest.TestCase):
                 {"capslock": True, "numlock": False, "scrolllock": True},
             )
             self.assertGreaterEqual(len(state["shortcuts"]), 4)
+
+    def test_k500_read_leds_xset_fallback_bug_009(self) -> None:
+        """BUG-009: Passive fallback to xset q for K500 LED indicators when sysfs is unpopulated."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            leds_root = root / "empty_leds"
+            leds_root.mkdir()
+            input_devs = root / "devices"
+            _make_fake_hidraw_node(hidraw_root, "hidraw2", "258a", "0049", hid_name="Machenike K500-B94")
+
+            drv = K500KeyboardDriver(
+                hidraw_root=hidraw_root,
+                leds_root=leds_root,
+                input_devices_path=input_devs,
+            )
+
+            # Case 1: xset q reports LED mask 00000002 (numlock ON)
+            with mock.patch("dpi_core.hardware._run_cmd", return_value=(0, "Keyboard Control:\n  auto repeat:  on\n  LED mask:  00000002\n", "")):
+                state = drv.read_state()
+            self.assertEqual(state["leds"], {"capslock": False, "numlock": True, "scrolllock": False})
+
+            # Case 2: xset q reports LED mask 00000007 (caps, num, scroll all ON)
+            with mock.patch("dpi_core.hardware._run_cmd", return_value=(0, "  LED mask:  00000007\n", "")):
+                state_all = drv.read_state()
+            self.assertEqual(state_all["leds"], {"capslock": True, "numlock": True, "scrolllock": True})
+
+            # Case 3: xset q fails (rc != 0) -> fallback to all False safely
+            with mock.patch("dpi_core.hardware._run_cmd", return_value=(1, "", "xset: unable to open display")):
+                state_err = drv.read_state()
+            self.assertEqual(state_err["leds"], {"capslock": False, "numlock": False, "scrolllock": False})
 
 
 class TestGamepadDriver(unittest.TestCase):

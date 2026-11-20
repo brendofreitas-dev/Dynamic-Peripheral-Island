@@ -5,6 +5,24 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.11] - 2026-11-20
+
+### Adicionado
+- **FEAT-003 / BUG-010 (Gestão Determinística de Estados do Mouse AJAZZ AJ179 V2)**:
+  - `AjazzMouseDriver` (`src/dpi_core/hardware.py`): mantendo 100% de leitura passiva segura, adicionada inspeção do byte online (`info_resp[14]`) e rastreamento de `offline_since` em cache.
+  - Distinção clara entre `active` (mouse online em uso), `sleep` (modo de descanso sem fio até 180s, `connection_type = "Descanso"`) e `off` (desligado após 180s ou dongle desconectado, `connection_type = "Desligado"`).
+  - Criado o ícone vetorial SVG `icons/dpi-mouse-sleep-symbolic.svg` (16x16) para representar o mouse em repouso.
+  - `src/dpi_core/cli.py` e `applet.js`: quando em estado `off`, o mouse é automaticamente ocultado da TopBar (`visible = False`), despoluindo a barra; em estado `sleep`, exibe o ícone de descanso com tom suavizado (`muted`) e tooltip descritivo.
+
+### Corrigido
+- **BUG-009 (Visibilidade dos Badges de LEDs do Teclado K500 & Fallback Passivo)**:
+  - `stylesheet.css`: corrigida a especificidade CSS dos badges no tema escuro (`.dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on`), permitindo que os indicadores de `CAPS`, `NUM` e `SCROLL` acendam com destaque visual nítido quando ativos.
+  - `K500KeyboardDriver` (`src/dpi_core/hardware.py`): implementado fallback passivo somente-leitura via `xset q` quando o diretório sysfs de LEDs não estiver disponível ou acessível.
+- **UX-012 (Centralização Estável do Popover na TopBar)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: fixado `this.menu.sourceActor` exclusivamente no centro da Ilha Dinâmica (`_unifiedCenterBox`), garantindo que o Popover abra sempre perfeitamente centralizado no meio da barra superior, independente de qual segmento foi clicado.
+- **UX-013 (Sincronização Tipográfica Dinâmica na TopBar)**:
+  - `stylesheet.css`: substituído `font-size: 11px;` estático por `font-size: 1em;` em `.dpi-pill-text` e `.dpi-morph-text`, permitindo que os rótulos de periféricos e de Antigravity herdem proporcionalmente o tamanho da fonte configurado para o relógio e painel do Cinnamon.
+
 ## [1.0.10] - 2026-11-20
 
 ### Corrigido

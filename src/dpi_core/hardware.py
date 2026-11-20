@@ -371,6 +371,12 @@ class AjazzMouseDriver:
         active_stage = max(0, min(5, int(cached.get("active_dpi_stage", 2))))
         colors = self._normalize_dpi_colors(cached.get("dpi_colors"))
         default_led = "#{:02X}{:02X}{:02X}".format(*colors[active_stage])
+        offline_since = cached.get("offline_since")
+        if offline_since is not None:
+            try:
+                offline_since = int(offline_since)
+            except (ValueError, TypeError):
+                offline_since = None
         return {
             "battery": cached.get("battery"),
             "charging": bool(cached.get("charging", False)),
@@ -381,6 +387,7 @@ class AjazzMouseDriver:
             "dpi_colors": colors,
             "led_color": str(cached.get("led_color", default_led)),
             "sleep_seconds": int(cached.get("sleep_seconds", 300)),
+            "offline_since": offline_since,
             "updated_at": cached.get("updated_at"),
         }
 
@@ -393,6 +400,12 @@ class AjazzMouseDriver:
         )
         active_stage = max(0, min(5, int(state.get("active_dpi_stage", 2))))
         colors = self._normalize_dpi_colors(state.get("dpi_colors"))
+        offline_since = state.get("offline_since")
+        if offline_since is not None:
+            try:
+                offline_since = int(offline_since)
+            except (ValueError, TypeError):
+                offline_since = None
         payload = {
             "battery": state.get("battery"),
             "charging": bool(state.get("charging", False)),
@@ -403,6 +416,7 @@ class AjazzMouseDriver:
             "dpi_colors": colors,
             "led_color": str(state.get("led_color", "#{:02X}{:02X}{:02X}".format(*colors[active_stage]))),
             "sleep_seconds": int(state.get("sleep_seconds", 300)),
+            "offline_since": offline_since,
             "updated_at": int(time.time()),
         }
         _write_json_file(self.cache_path, payload)
@@ -521,6 +535,7 @@ class AjazzMouseDriver:
             "name": "AJAZZ AJ179 V2",
             "connected": False,
             "active": False,
+            "power_state": "off",
             "battery": cache["battery"],
             "charging": cache["charging"],
             "connection_type": "Disconnected",
@@ -530,6 +545,7 @@ class AjazzMouseDriver:
             "polling_rate": cache["polling_rate"],
             "led_color": cache["led_color"],
             "sleep_seconds": cache["sleep_seconds"],
+            "offline_since": cache.get("offline_since"),
             "standby": False,
             "cached": False,
             "hidraw_path": None,
@@ -537,6 +553,11 @@ class AjazzMouseDriver:
 
         if node is None:
             state["cached"] = cache["updated_at"] is not None
+            state["power_state"] = "off"
+            state["connected"] = False
+            state["active"] = False
+            state["standby"] = False
+            state["connection_type"] = "Disconnected"
             return state
 
         state["connected"] = True
@@ -546,6 +567,7 @@ class AjazzMouseDriver:
         base_conn = "2.4GHz" if is_wireless else "USB-C"
 
         live_ok = False
+        online_byte_zero = False
 
         # 1. Query primary device info opcode (0x10) — read-only
         # Example live response: 10 00 01 0b 4e 36 32 34 84 01 11 01 00 30 01 ... b2
@@ -561,9 +583,13 @@ class AjazzMouseDriver:
                 and info_resp[2] != 0xFF
             ):
                 if info_resp[3] >= 11 and 1 <= info_resp[13] <= 100:
-                    state["battery"] = int(info_resp[13])
-                    state["charging"] = bool(info_resp[12] == 0x01)
-                    live_ok = True
+                    if len(info_resp) > 14 and info_resp[14] == 0x00:
+                        online_byte_zero = True
+                        live_ok = False
+                    else:
+                        state["battery"] = int(info_resp[13])
+                        state["charging"] = bool(info_resp[12] == 0x01)
+                        live_ok = True
                 elif 0 < info_resp[3] < 11 and 1 <= info_resp[4] <= 100:
                     state["battery"] = int(info_resp[4])
                     state["charging"] = bool(info_resp[5] == 0x01)
@@ -635,8 +661,8 @@ class AjazzMouseDriver:
                 if 10 <= sec <= 3600:
                     state["sleep_seconds"] = sec
 
-        # Passive power_supply fallback if HID didn't answer
-        if not live_ok:
+        # Passive power_supply fallback if HID didn't answer (and radio not confirmed offline)
+        if not live_ok and not online_byte_zero:
             sys_bat, sys_chg = self._read_sysfs_battery()
             if sys_bat is not None:
                 state["battery"] = sys_bat
@@ -647,16 +673,35 @@ class AjazzMouseDriver:
             state["active"] = True
             state["standby"] = False
             state["cached"] = False
+            state["offline_since"] = None
+            state["power_state"] = "active"
             state["connection_type"] = "USB-C" if state["charging"] else base_conn
             cache_to_save = dict(state)
             cache_to_save["dpi_colors"] = dpi_colors
             self._save_cache(cache_to_save)
         else:
-            # Receiver present, sensor PAW3395 in deep sleep -> preserve last known cache
+            # Receiver present, sensor PAW3395 in deep sleep / radio off -> preserve last known cache
+            now_ts = int(time.time())
+            offline_since = cache.get("offline_since")
+            if offline_since is None:
+                offline_since = now_ts
+            state["offline_since"] = int(offline_since)
+            offline_elapsed = max(0, now_ts - int(offline_since))
+
             state["active"] = False
-            state["standby"] = True
             state["cached"] = True
-            state["connection_type"] = "Standby" if is_wireless else "USB-C"
+            if offline_elapsed <= 180:
+                state["power_state"] = "sleep"
+                state["standby"] = True
+                state["connection_type"] = "Descanso"
+            else:
+                state["power_state"] = "off"
+                state["standby"] = False
+                state["connection_type"] = "Desligado"
+
+            cache_to_save = dict(state)
+            cache_to_save["dpi_colors"] = dpi_colors
+            self._save_cache(cache_to_save)
 
         return state
 
@@ -1340,14 +1385,30 @@ class K500KeyboardDriver:
             pass
         return False
 
+    def _read_leds_from_xset(self) -> Dict[str, bool]:
+        """Passive fallback to read keyboard LED indicators via xset q."""
+        res = {"capslock": False, "numlock": False, "scrolllock": False}
+        rc, stdout, _ = _run_cmd(["xset", "q"], timeout=1.0)
+        if rc == 0 and stdout:
+            match = re.search(r"LED\s+mask:\s*([0-9a-fA-F]+)", stdout)
+            if match:
+                try:
+                    mask = int(match.group(1), 16)
+                    res["capslock"] = bool(mask & 0x01)
+                    res["numlock"] = bool(mask & 0x02)
+                    res["scrolllock"] = bool(mask & 0x04)
+                except ValueError:
+                    pass
+        return res
+
     def _read_leds(self) -> Dict[str, bool]:
         leds = {"capslock": False, "numlock": False, "scrolllock": False}
         if not self.leds_root.exists():
-            return leds
+            return self._read_leds_from_xset()
         try:
             entries = sorted(self.leds_root.iterdir(), key=lambda p: p.name)
         except OSError:
-            return leds
+            return self._read_leds_from_xset()
 
         # Prefer LED directories whose parent device matches 258a:0049; fallback to any input*::*
         matched_specific: Dict[str, bool] = {}
@@ -1386,6 +1447,16 @@ class K500KeyboardDriver:
                 leds[key] = matched_specific[key]
             elif key in fallback:
                 leds[key] = fallback[key]
+
+        # Passive fallback via xset q if sysfs returned all False or was unpopulated
+        if not matched_specific and not fallback:
+            return self._read_leds_from_xset()
+
+        if not any(leds.values()):
+            xset_leds = self._read_leds_from_xset()
+            if any(xset_leds.values()):
+                return xset_leds
+
         return leds
 
     def read_state(self) -> Dict[str, Any]:

@@ -168,7 +168,7 @@
 }
 
 .dpi-pill-text {
-    font-size: 11px;
+    font-size: 1em;
     font-weight: bold;
 }
 
@@ -310,7 +310,7 @@
 }
 
 .dpi-morph-text {
-    font-size: 11px;
+    font-size: 1em;
     font-weight: 600;
 }
 
@@ -910,8 +910,15 @@
     color: #f8f8f2;
 }
 
-.dpi-theme-light .dpi-kbd-badge-on {
-    background-color: rgba(189, 147, 249, 0.16);
+.dpi-theme-dark .dpi-kbd-badge.dpi-kbd-badge-on {
+    background-color: rgba(189, 147, 249, 0.55);
+    border-color: rgba(189, 147, 249, 0.85);
+    color: #f8f8f2;
+}
+
+.dpi-theme-light .dpi-kbd-badge-on,
+.dpi-theme-light .dpi-kbd-badge.dpi-kbd-badge-on {
+    background-color: rgba(189, 147, 249, 0.22);
     border-color: #9333EA;
     color: #7E22CE;
 }

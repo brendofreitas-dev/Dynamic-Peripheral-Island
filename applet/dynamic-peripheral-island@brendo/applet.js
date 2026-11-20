@@ -1585,6 +1585,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _syncPopoverWidth() {
         if (!this._popoverRoot) return;
+        let targetW = this._activeTab === "antigravity" ? 720 : 480;
+        this._popoverRoot.width = targetW;
         if (this._activeTab === "antigravity") {
             this._popoverRoot.add_style_class_name("dpi-popover-wide");
             if (this._scrollView) {
@@ -1653,24 +1655,65 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _switchTab(newTabId, animate = true) {
         if (!this._popoverRoot) return;
         let order = ["peripherals", "audio", "antigravity", "settings"];
-        let oldIdx = Math.max(0, order.indexOf(this._activeTab));
+        let oldTab = this._activeTab;
+        let oldIdx = Math.max(0, order.indexOf(oldTab));
         let newIdx = Math.max(0, order.indexOf(newTabId));
         let dir = newIdx >= oldIdx ? 1 : -1;
 
+        let oldW = this._popoverRoot.width || (oldTab === "antigravity" ? 720 : 480);
+        let targetW = newTabId === "antigravity" ? 720 : 480;
+        let widthChanged = animate && oldW !== targetW;
+
         this._activeTab = newTabId;
         this._justExpandedCard = null;
-        this._syncPopoverWidth();
-        this._syncSegmentHighlight();
-        this._renderTabBar();
-        this._renderActiveTabBody();
-        this._scheduleMenuReposition();
+
+        if (widthChanged) {
+            this._popoverRoot.remove_all_transitions();
+            this._popoverRoot.width = oldW;
+            if (newTabId === "antigravity") {
+                this._popoverRoot.add_style_class_name("dpi-popover-wide");
+                if (this._scrollView) this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
+            } else {
+                this._popoverRoot.remove_style_class_name("dpi-popover-wide");
+                if (this._scrollView) this._scrollView.vscrollbar_policy = St.PolicyType.AUTOMATIC;
+            }
+            this._syncSegmentHighlight();
+            this._renderTabBar();
+            this._renderActiveTabBody();
+
+            this._popoverRoot.ease({
+                width: targetW,
+                duration: 420,
+                mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                onComplete: () => {
+                    if (!this._destroyed) this._scheduleMenuReposition();
+                },
+            });
+
+            if (this.menu && this.menu.actor) {
+                this.menu.actor.remove_transition("x");
+                let oldX = this.menu.actor.x;
+                let targetX = Math.round(oldX - (targetW - oldW) / 2);
+                this.menu.actor.ease({
+                    x: targetX,
+                    duration: 420,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUINT,
+                });
+            }
+        } else {
+            this._syncPopoverWidth();
+            this._syncSegmentHighlight();
+            this._renderTabBar();
+            this._renderActiveTabBody();
+            this._scheduleMenuReposition();
+        }
 
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
             this._bodyStack.opacity = 0;
-            this._bodyStack.scale_x = 0.98;
-            this._bodyStack.scale_y = 0.98;
-            this._bodyStack.translation_x = dir * 24;
+            this._bodyStack.scale_x = 0.975;
+            this._bodyStack.scale_y = 0.975;
+            this._bodyStack.translation_x = dir * 18;
 
             if (typeof this._bodyStack.set_pivot_point === "function") {
                 try {
@@ -1680,13 +1723,14 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
             }
 
+            // Fluid LiquidGlass ease mode: Clutter.AnimationMode.EASE_OUT_QUINT (evolved from Clutter.AnimationMode.EASE_OUT_EXPO)
             let easeParams = {
                 opacity: 255,
                 scale_x: 1.0,
                 scale_y: 1.0,
                 translation_x: 0,
-                duration: 240,
-                mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+                duration: 420,
+                mode: Clutter.AnimationMode.EASE_OUT_QUINT,
             };
             try {
                 const Graphene = imports.gi.Graphene;
@@ -1707,8 +1751,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         body.ease({
             opacity: 255,
             translation_y: 0,
-            duration: 160,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            duration: 300,
+            mode: Clutter.AnimationMode.EASE_OUT_QUINT,
         });
     }
 

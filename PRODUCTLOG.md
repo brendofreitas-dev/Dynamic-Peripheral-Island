@@ -361,6 +361,18 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes unitários cobrindo a aba de áudio, métodos de renderização e tokens CSS.
 - **Validação**: 44/44 testes aprovados, reload instantâneo no Cinnamon em 317ms sem erros no `~/.xsession-errors`.
 
+### `UX-015` — Morphing Fluido LiquidGlass com Expansão Centralizada e Cadência Sedosa (`2026-11-20`)
+- **Severidade**: Aprimoramento de Fluidez de Animação e Microinteração.
+- **Causa Raiz & Solução**:
+  - Ao alternar entre abas compactas (`480px`, como `Periféricos` ou `Áudio`) e a aba ampla de `Antigravity VU` (`720px`), a largura do Popover sofria alteração brusca em um único frame, rompendo a ilusão de continuidade do LiquidGlass. Além disso, a curva anterior `EASE_OUT_EXPO` em 240ms era excessivamente rápida.
+  - Foi introduzido o morphing dinâmico contínuo de largura (`_popoverRoot.ease({ width: targetW, duration: 420, mode: Clutter.AnimationMode.EASE_OUT_QUINT })`) combinado com a interpolação no eixo horizontal da posição do menu (`this.menu.actor.ease({ x: Math.round(oldX - (targetW - oldW) / 2), duration: 420, mode: Clutter.AnimationMode.EASE_OUT_QUINT })`). Dessa forma, a janela expande e contrai concentricamente a partir do centro da Ilha Dinâmica.
+  - A cadência de transição de abas e expansão de cards foi suavizada para `420ms` / `300ms` com `EASE_OUT_QUINT`, e o `transition-duration` das classes CSS de cards, abas e chips foi unificado em `320ms`.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: lógica de morphing de largura e cálculo de offset `x` em `_switchTab()`; cadência de `420ms` / `300ms` com `EASE_OUT_QUINT` em `_bodyStack` e `_animateCardBody()`; sincronização em `_syncPopoverWidth()`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: unificação de `transition-duration: 320ms;` nas classes temáticas.
+  - `tests/test_cli_and_applet.py`: asserções de validação para `EASE_OUT_QUINT`, `duration: 420` e `transition-duration: 320ms`.
+- **Validação**: 44/44 testes aprovados, reload no Cinnamon em 309ms com transição perfeitamente sedosa e contínua sem saltos visuais.
+
 ---
 
 ## 5. Procedimentos de Rollback

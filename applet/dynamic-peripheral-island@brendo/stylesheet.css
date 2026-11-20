@@ -14,7 +14,7 @@
     padding: 0 4px;
     margin: 1px 0;
     spacing: 2px;
-    transition-duration: 180ms;
+    transition-duration: 320ms;
 }
 
 .dpi-unified-capsule.dpi-theme-dark {
@@ -56,7 +56,7 @@
     padding: 0 4px;
     margin: 1px 0;
     spacing: 4px;
-    transition-duration: 180ms;
+    transition-duration: 320ms;
 }
 
 .dpi-standalone-capsule.dpi-theme-dark {
@@ -107,7 +107,7 @@
     background-color: transparent;
     border: none;
     box-shadow: none;
-    transition-duration: 160ms;
+    transition-duration: 320ms;
 }
 
 /* Root container of our applet inside the capsule */
@@ -144,7 +144,7 @@
     border: none;
     box-shadow: none;
     spacing: 7px;
-    transition-duration: 160ms;
+    transition-duration: 320ms;
 }
 
 .dpi-capsule-segment-active.dpi-theme-dark,
@@ -442,7 +442,7 @@
     spacing: 5px;
     font-size: 11.5px;
     font-weight: 600;
-    transition-duration: 220ms;
+    transition-duration: 320ms;
 }
 
 .dpi-theme-dark .dpi-tab-btn {
@@ -539,7 +539,7 @@
     padding: 10px 12px;
     spacing: 8px;
     border-width: 1px;
-    transition-duration: 220ms;
+    transition-duration: 320ms;
 }
 
 .dpi-theme-dark .dpi-card {
@@ -760,7 +760,7 @@
     font-size: 10.5px;
     font-weight: 600;
     border-width: 1px;
-    transition-duration: 150ms;
+    transition-duration: 320ms;
 }
 
 .dpi-theme-dark .dpi-chip {

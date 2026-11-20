@@ -495,8 +495,12 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_buildAudioMixerCard(", src)
         self.assertIn("_buildPerAppAudioCard(", src)
 
-        # UX-014: LiquidGlass fluid tab switching animation
-        self.assertIn("Clutter.AnimationMode.EASE_OUT_EXPO", src)
+        # UX-014 & UX-015: LiquidGlass fluid tab switching animation, morphing & EASE_OUT_QUINT
+        self.assertIn("Clutter.AnimationMode.EASE_OUT_QUINT", src)
+        self.assertIn("duration: 420", src)
+        self.assertIn("width: targetW", src)
+        self.assertIn("this.menu.actor.ease({", src)
+        self.assertIn("duration: 300", src)
 
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
@@ -574,6 +578,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-tab-btn-active",
             ".dpi-media-title",
             ".dpi-media-controls",
+            "transition-duration: 320ms;",
         ):
             self.assertIn(glass_token, css)
 

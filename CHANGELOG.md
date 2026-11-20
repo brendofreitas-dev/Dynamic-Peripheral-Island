@@ -5,6 +5,18 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.1] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **UX-015 (Morphing Fluido LiquidGlass com Expansão Centralizada e Cadência Sedosa)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Implementado morphing contínuo de largura no `_switchTab()` durante a troca entre abas compactas (`480px`, ex.: `Periféricos`, `Áudio`, `Ajustes`) e abas amplas (`720px`, `Antigravity VU`), animando `this._popoverRoot.ease({ width: targetW, duration: 420, mode: Clutter.AnimationMode.EASE_OUT_QUINT })`.
+    - Reposicionamento horizontal sincronizado no eixo X do ator do menu (`this.menu.actor.ease({ x: Math.round(oldX - (targetW - oldW) / 2), duration: 420, mode: Clutter.AnimationMode.EASE_OUT_QUINT })`), garantindo que o Popover expanda e contraia suavemente a partir do centro da Ilha Dinâmica, eliminando saltos abruptos de frame.
+    - Cadência de transição suave em todas as trocas de aba via `this._bodyStack.ease` com `duration: 420`, `mode: EASE_OUT_QUINT`, escala sutil (`0.975 -> 1.0`), translação direcional (`dir * 18 -> 0`) e opacidade.
+    - Expansão de cards via `_animateCardBody()` ajustada para cadência fluida de `duration: 300` com `EASE_OUT_QUINT`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`:
+    - Cadência uniforme de `transition-duration: 320ms;` em cards (`.dpi-card`), abas (`.dpi-tab-btn`), chips (`.dpi-chip`) e segmentos da cápsula da ilha (`.dpi-capsule-segment`, `.dpi-unified-capsule`, `.dpi-capsule-clock`), proporcionando resposta tátil sedosa e consistente com o ecossistema LiquidGlass.
+
 ## [1.1.0] - 2026-11-20
 
 ### Adicionado

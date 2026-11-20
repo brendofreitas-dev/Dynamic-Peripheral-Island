@@ -5,6 +5,13 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.9] - 2026-11-20
+
+### Alterado
+- **UX-011 (Pílula Compacta do Headset na TopBar)**:
+  - `src/dpi_core/cli.py` e `applet/dynamic-peripheral-island@brendo/applet.js`: simplificado o rótulo do headset na TopBar (`status_text`) para exibir apenas o nível de bateria (`80%` ou `80%+` se carregando) quando disponível, ou `BT` / `2.4GHz` quando sem bateria reportada, padronizando a largura visual com o mouse e o gamepad.
+  - O volume detalhado e status de mudo permanecem preservados no `Tooltips.Tooltip` individual (`Havit Fuxi H3 (Bluetooth) — Bateria: 80% | Volume: 100%`) e no card do Popover.
+
 ## [1.0.8] - 2026-11-20
 
 ### Corrigido

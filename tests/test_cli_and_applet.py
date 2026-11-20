@@ -677,7 +677,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             wb_off = json.loads(buf_wb_off.getvalue())
             self.assertIn("Havit Fuxi H3 (2.4GHz) — Standby", wb_off["tooltip"])
 
-            # FEAT-002: Headset in Bluetooth mode with battery + volume
+            # FEAT-002 & UX-011: Headset in Bluetooth mode with battery only on TopBar pill
             hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"] = {
                 "id": "havit_fuxi_h3",
                 "name": "Havit Fuxi H3",
@@ -702,7 +702,8 @@ class TestAppletCssAndDocs(unittest.TestCase):
             data_hs_bt = json.loads(buf_hs_bt.getvalue())
             hs_periph_bt = {p["key"]: p for p in data_hs_bt["capsule"]["peripherals"]}["headset"]
             self.assertTrue(hs_periph_bt["visible"])
-            self.assertEqual(hs_periph_bt["status_text"], "85% · Vol 70%")
+            self.assertEqual(hs_periph_bt["status_text"], "85%")
+            self.assertEqual(hs_periph_bt["detail_text"], "Bluetooth · Vol 70%")
 
             buf_wb_bt = io.StringIO()
             with contextlib.redirect_stdout(buf_wb_bt):
@@ -715,7 +716,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             wb_bt = json.loads(buf_wb_bt.getvalue())
             self.assertIn("Havit Fuxi H3 (Bluetooth) — Bateria: 85% | Volume: 70%", wb_bt["tooltip"])
 
-            # Bluetooth with Muted
+            # Bluetooth with Muted (pill stays 85%, detail shows Mudo, tooltip shows Volume: Mudo)
             hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"]["muted"] = True
             buf_hs_mute = io.StringIO()
             with contextlib.redirect_stdout(buf_hs_mute):
@@ -727,7 +728,34 @@ class TestAppletCssAndDocs(unittest.TestCase):
                 )
             data_hs_mute = json.loads(buf_hs_mute.getvalue())
             hs_periph_mute = {p["key"]: p for p in data_hs_mute["capsule"]["peripherals"]}["headset"]
-            self.assertEqual(hs_periph_mute["status_text"], "85% · Mudo")
+            self.assertEqual(hs_periph_mute["status_text"], "85%")
+            self.assertEqual(hs_periph_mute["detail_text"], "Bluetooth · Mudo")
+
+            buf_wb_mute = io.StringIO()
+            with contextlib.redirect_stdout(buf_wb_mute):
+                cli.main(
+                    argv=["--waybar"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            wb_mute = json.loads(buf_wb_mute.getvalue())
+            self.assertIn("Havit Fuxi H3 (Bluetooth) — Bateria: 85% | Mudo", wb_mute["tooltip"])
+
+            # 2.4GHz without battery and muted (pill shows Mudo)
+            hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"]["battery"] = None
+            hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"]["connection_type"] = "2.4GHz"
+            buf_hs_24_mute = io.StringIO()
+            with contextlib.redirect_stdout(buf_hs_24_mute):
+                cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            data_hs_24_mute = json.loads(buf_hs_24_mute.getvalue())
+            hs_periph_24_mute = {p["key"]: p for p in data_hs_24_mute["capsule"]["peripherals"]}["headset"]
+            self.assertEqual(hs_periph_24_mute["status_text"], "Mudo")
 
     def test_install_and_uninstall_scripts_syntax(self) -> None:
         for script_name in ("install.sh", "uninstall.sh"):

@@ -266,6 +266,15 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes unitários adicionados para validar a classe de 720px, larguras das colunas de 342px, histograma contido e rotinas de relayout.
 - **Validação**: 34/34 testes aprovados e visualização 100% contida e alinhada sem vazamentos no Cinnamon Desktop.
 
+### `UX-011` — Pílula Compacta do Headset na TopBar (`2026-11-20`)
+- **Severidade**: Baixa (refinamento ergonômico e consistência visual).
+- **Causa Raiz**:
+  - A inclusão do percentual de volume no texto da TopBar (`80% · Vol 100%`) tornava a pílula do headset consideravelmente mais larga do que as dos demais periféricos (mouse e controle), desbalanceando visualmente o segmento de periféricos na barra.
+- **Arquivos Modificados**:
+  - `src/dpi_core/cli.py` e `applet/dynamic-peripheral-island@brendo/applet.js`: simplificação de `status_text` para exibir exclusivamente a bateria (`80%` ou `80%+`), mantendo o volume no `detail_text`, nos tooltips do Cinnamon e na saída Waybar.
+  - `tests/test_cli_and_applet.py`: asserções atualizadas para validar o texto compacto `85%`.
+- **Validação**: 34/34 testes aprovados e cápsula da TopBar harmonizada no Cinnamon.
+
 ---
 
 ## 5. Procedimentos de Rollback

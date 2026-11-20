@@ -1263,17 +1263,20 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : h.battery;
                     let vol = (p.volume !== null && p.volume !== undefined) ? p.volume : h.volume;
                     let isMuted = p.muted !== undefined ? p.muted : Boolean(h.muted);
-                    let volStr = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? "Vol " + vol + "%" : "Vol 100%");
+                    let volDisp = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? vol + "%" : "100%");
 
                     if (isBt && bat !== null && bat !== undefined) {
-                        text = bat + "% · " + volStr;
-                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                        text = p.charging ? bat + "%+" : bat + "%";
+                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + volDisp;
                     } else if (isBt) {
-                        text = "BT · " + volStr;
-                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                        text = "BT";
+                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Volume: " + volDisp;
+                    } else if (bat !== null && bat !== undefined) {
+                        text = p.charging ? bat + "%+" : bat + "%";
+                        tooltipText = "Havit Fuxi H3 (2.4GHz) — Bateria: " + bat + "% | Volume: " + volDisp;
                     } else {
-                        text = "2.4GHz · " + volStr;
-                        tooltipText = "Havit Fuxi H3 (2.4GHz) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "100%"));
+                        text = "2.4GHz";
+                        tooltipText = "Havit Fuxi H3 (2.4GHz) — Volume: " + volDisp;
                     }
                 } else if (p.key === "gamepad") {
                     let g = peripherals.gamepad || {};
@@ -1316,18 +1319,21 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 let vol = headset.volume;
                 let isMuted = Boolean(headset.muted);
                 let isBt = headset.connection_type === "Bluetooth";
-                let volStr = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? "Vol " + vol + "%" : "Vol 100%");
+                let volDisp = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? vol + "%" : "100%");
                 let text = "";
                 let tip = "";
                 if (isBt && bat !== null && bat !== undefined) {
-                    text = bat + "% · " + volStr;
-                    tip = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                    text = headset.charging ? bat + "%+" : bat + "%";
+                    tip = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + volDisp;
                 } else if (isBt) {
-                    text = "BT · " + volStr;
-                    tip = "Havit Fuxi H3 (Bluetooth) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                    text = "BT";
+                    tip = "Havit Fuxi H3 (Bluetooth) — Volume: " + volDisp;
+                } else if (bat !== null && bat !== undefined) {
+                    text = headset.charging ? bat + "%+" : bat + "%";
+                    tip = "Havit Fuxi H3 (2.4GHz) — Bateria: " + bat + "% | Volume: " + volDisp;
                 } else {
-                    text = "2.4GHz · " + volStr;
-                    tip = "Havit Fuxi H3 (2.4GHz) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "100%"));
+                    text = "2.4GHz";
+                    tip = "Havit Fuxi H3 (2.4GHz) — Volume: " + volDisp;
                 }
                 let tone = isMuted ? "warn" : (bat !== null && bat !== undefined ? pctSeverityClass(bat, threshold) : "info");
                 this._segPeripherals.add_child(this._makePillItem("audio-headphones-symbolic", text, tone, null, tip));

@@ -146,14 +146,13 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
             status_text = "Standby"
             detail_text = f"{conn_type} · Standby"
         elif has_bat:
-            base_status = f"{int(battery)}% · {vol_str}"
-            status_text = f"{base_status}+" if charging else base_status
-            bat_lbl = f"{int(battery)}%+" if charging else f"{int(battery)}%"
-            detail_text = f"{conn_type} · Bateria {bat_lbl}"
+            status_text = f"{int(battery)}%+" if charging else f"{int(battery)}%"
+            detail_text = f"{conn_type} · {vol_str}"
         else:
-            base_status = f"{conn_type} · {vol_str}"
+            tag = "BT" if conn_type == "Bluetooth" else (conn_type if conn_type else "2.4GHz")
+            base_status = "Mudo" if muted else tag
             status_text = f"{base_status}+" if charging else base_status
-            detail_text = conn_type
+            detail_text = f"{conn_type} · {vol_str}"
     elif key == "gamepad":
         controllers = dev.get("controllers") or []
         active_ctrls = [c for c in controllers if c.get("active")]

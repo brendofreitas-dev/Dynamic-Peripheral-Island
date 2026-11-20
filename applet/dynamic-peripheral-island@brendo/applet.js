@@ -12,6 +12,7 @@ const Main = imports.ui.main;
 const Pango = imports.gi.Pango;
 const PopupMenu = imports.ui.popupMenu;
 const St = imports.gi.St;
+const Tooltips = imports.ui.tooltips;
 
 const UUID = "dynamic-peripheral-island@brendo";
 const HOTKEY_NAME = "dpi-toggle-island";
@@ -125,6 +126,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this.setAllowedLayout(Applet.AllowedLayout.HORIZONTAL);
         this.actor.remove_style_class_name("applet-box");
         this.actor.add_style_class_name("dpi-applet-box");
+        this.set_applet_tooltip("");
 
         // Runtime state
         this._data = null;
@@ -151,8 +153,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._calendarActor = null;
         this._calMenu = null;
         this._calMenuSignalId = 0;
-        this._stageEnterSignalId = 0;
+        this._calHoverTimerId = 0;
         this._tabHoverTimerId = 0;
+        this._pillTooltips = [];
         this._taggedClockActors = [];
         this._hoverSignals = [];
         this._seenAlerts = {};
@@ -371,24 +374,57 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _renderTopBarPlaceholder() {
+        this._clearPillTooltips();
         this._segPeripherals.destroy_all_children();
-        this._segPeripherals.add_child(this._makePillItem("input-mouse-symbolic", "--", "muted"));
+        this._segPeripherals.add_child(this._makePillItem("input-mouse-symbolic", "--", "muted", null, "Perifericos"));
 
         this._segAntigravity.destroy_all_children();
-        this._segAntigravity.add_child(this._makePillItem("applications-science-symbolic", "AG", "muted"));
+        this._segAntigravity.add_child(this._makePillItem("applications-science-symbolic", "AG", "muted", null, "Antigravity"));
     }
 
-    _makePillItem(iconName, text, tone, extraDotClass) {
+    _makeDeviceIcon(iconName, styleClass, size) {
+        let isGamepad = iconName === "dpi-gamepad-symbolic" || iconName === "input-gaming-symbolic";
+        if (isGamepad && this._meta && this._meta.path) {
+            let svgPath = GLib.build_filenamev([this._meta.path, "icons", "dpi-gamepad-symbolic.svg"]);
+            if (GLib.file_test(svgPath, GLib.FileTest.EXISTS)) {
+                let iconProps = {
+                    gicon: Gio.icon_new_for_string(svgPath),
+                    icon_type: St.IconType.SYMBOLIC,
+                    style_class: styleClass || "dpi-pill-icon",
+                };
+                if (size) iconProps.icon_size = size;
+                return new St.Icon(iconProps);
+            }
+        }
+        let iconProps = {
+            icon_name: iconName === "dpi-gamepad-symbolic" ? "input-gaming-symbolic" : iconName,
+            icon_type: St.IconType.SYMBOLIC,
+            style_class: styleClass || "dpi-pill-icon",
+        };
+        if (size) iconProps.icon_size = size;
+        return new St.Icon(iconProps);
+    }
+
+    _clearPillTooltips() {
+        if (Array.isArray(this._pillTooltips)) {
+            for (let tip of this._pillTooltips) {
+                try {
+                    tip.destroy();
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+        this._pillTooltips = [];
+    }
+
+    _makePillItem(iconName, text, tone, extraDotClass, tooltipText) {
         let item = new St.BoxLayout({
             style_class: "dpi-pill-item",
             y_align: Clutter.ActorAlign.CENTER,
         });
         if (iconName) {
-            item.add_child(new St.Icon({
-                icon_name: iconName,
-                icon_type: St.IconType.SYMBOLIC,
-                style_class: "dpi-pill-icon",
-            }));
+            item.add_child(this._makeDeviceIcon(iconName, "dpi-pill-icon"));
         }
         if (extraDotClass) {
             let dot = new St.Widget({
@@ -407,6 +443,16 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 style_class: textClass,
                 y_align: Clutter.ActorAlign.CENTER,
             }));
+        }
+        if (tooltipText) {
+            item.reactive = true;
+            item.track_hover = true;
+            try {
+                let tip = new Tooltips.Tooltip(item, String(tooltipText));
+                this._pillTooltips.push(tip);
+            } catch (e) {
+                // ignore
+            }
         }
         return item;
     }
@@ -563,62 +609,72 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _onCalendarOpenStateChanged(isOpen) {
         if (this._destroyed) return;
         if (isOpen) {
-            this._connectStageEnterListener();
+            this._startCalHoverMonitor();
         } else {
-            this._disconnectStageEnterListener();
+            this._stopCalHoverMonitor();
         }
     }
 
-    _connectStageEnterListener() {
-        this._disconnectStageEnterListener();
-        if (!global.stage) return;
+    _pointInActor(actor, px, py) {
+        if (!actor || !actor.visible || !actor.get_stage()) return false;
         try {
-            this._stageEnterSignalId = global.stage.connect("enter-event", (actor, event) => {
-                if (this._destroyed) return Clutter.EVENT_PROPAGATE;
-                let calMenu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
-                if (!calMenu || !calMenu.isOpen) {
-                    this._disconnectStageEnterListener();
-                    return Clutter.EVENT_PROPAGATE;
-                }
-                let src = event ? event.get_source() : null;
-                if (!src) return Clutter.EVENT_PROPAGATE;
+            let [ax, ay] = actor.get_transformed_position();
+            let [aw, ah] = actor.get_transformed_size();
+            return px >= ax && px < ax + aw && py >= ay && py < ay + ah;
+        } catch (e) {
+            return false;
+        }
+    }
 
-                let inLeft = (this._leftSlot && this._leftSlot.contains(src)) ||
-                             (this._segPeripherals && this._segPeripherals.contains(src));
-                let inRight = (this.actor && this.actor.contains(src)) ||
-                              (this._segAntigravity && this._segAntigravity.contains(src));
+    _startCalHoverMonitor() {
+        this._stopCalHoverMonitor();
+        let calMenu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
+        if (!calMenu || !calMenu.isOpen) return;
+
+        this._calHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
+            if (this._destroyed) {
+                this._calHoverTimerId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            let menu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
+            if (!menu || !menu.isOpen) {
+                this._calHoverTimerId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+
+            if (typeof global.get_pointer === "function") {
+                let [px, py] = global.get_pointer();
+                let inLeft = this._pointInActor(this._segPeripherals, px, py) ||
+                             this._pointInActor(this._leftSlot, px, py);
+                let inRight = this._pointInActor(this._segAntigravity, px, py) ||
+                              this._pointInActor(this.actor, px, py);
 
                 if (inLeft) {
-                    this._disconnectStageEnterListener();
-                    calMenu.close(false);
+                    this._calHoverTimerId = 0;
+                    menu.close(false);
                     this._openTabFromSegment("peripherals");
-                    return Clutter.EVENT_STOP;
-                } else if (inRight) {
-                    this._disconnectStageEnterListener();
-                    calMenu.close(false);
-                    this._openTabFromSegment("antigravity");
-                    return Clutter.EVENT_STOP;
+                    return GLib.SOURCE_REMOVE;
                 }
-                return Clutter.EVENT_PROPAGATE;
-            });
-        } catch (e) {
-            global.logWarning(UUID + ": failed to connect stage enter-event: " + e);
-        }
+                if (inRight) {
+                    this._calHoverTimerId = 0;
+                    menu.close(false);
+                    this._openTabFromSegment("antigravity");
+                    return GLib.SOURCE_REMOVE;
+                }
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
     }
 
-    _disconnectStageEnterListener() {
-        if (this._stageEnterSignalId && global.stage) {
-            try {
-                global.stage.disconnect(this._stageEnterSignalId);
-            } catch (e) {
-                // ignore
-            }
-            this._stageEnterSignalId = 0;
+    _stopCalHoverMonitor() {
+        if (this._calHoverTimerId) {
+            GLib.source_remove(this._calHoverTimerId);
+            this._calHoverTimerId = 0;
         }
     }
 
     _disconnectCalMenu() {
-        this._disconnectStageEnterListener();
+        this._stopCalHoverMonitor();
         if (this._calMenu && this._calMenuSignalId) {
             try {
                 this._calMenu.disconnect(this._calMenuSignalId);
@@ -631,6 +687,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _detachUnifiedCapsule() {
+        this._clearPillTooltips();
         this._disconnectCalMenu();
         this._calendarActor = null;
         if (this._hoverLeaveTimerId) {
@@ -1149,6 +1206,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _updateTopBar() {
         if (!this._data) return;
 
+        this._clearPillTooltips();
+
         let settings = this._data.settings || {};
         let threshold = Number(settings.battery_alert_threshold) || 20;
         let peripherals = this._getDevicesMap();
@@ -1165,7 +1224,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             let iconMap = {
                 mouse: "input-mouse-symbolic",
                 headset: "audio-headphones-symbolic",
-                gamepad: "input-gaming-symbolic",
+                gamepad: "dpi-gamepad-symbolic",
                 keyboard: "input-keyboard-symbolic",
             };
             for (let p of capsulePeriphs) {
@@ -1181,7 +1240,38 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                         )
                     )
                 ));
-                this._segPeripherals.add_child(this._makePillItem(icon, text, tone));
+
+                let tooltipText = "";
+                if (p.key === "mouse") {
+                    let m = peripherals.mouse || {};
+                    let conn = m.connection_type || p.connection_type || "2.4GHz";
+                    tooltipText = (m.name || "AJAZZ AJ179 V2") + " · " + conn;
+                    let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : m.battery;
+                    if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
+                    if (m.current_dpi) tooltipText += " · " + m.current_dpi + " DPI";
+                    else if (m.dpi) tooltipText += " · " + m.dpi + " DPI";
+                } else if (p.key === "headset") {
+                    let h = peripherals.headset || {};
+                    let conn = h.connection_type || p.connection_type || "2.4GHz";
+                    tooltipText = (h.name || "Havit Fuxi H3") + " · " + conn;
+                    let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : h.battery;
+                    if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
+                    if (h.volume !== null && h.volume !== undefined) tooltipText += " · Vol " + h.volume + "%";
+                } else if (p.key === "gamepad") {
+                    let g = peripherals.gamepad || {};
+                    let ctrls = Array.isArray(g.controllers) ? g.controllers : [];
+                    let c = ctrls.find((x) => x.active) || ctrls.find((x) => x.connected) || null;
+                    let name = (c && c.name) || (p.status_text && p.status_text.indexOf("EasySMX") !== -1 ? "EasySMX 9124" : "GameSir Nova Lite");
+                    let conn = (c && c.connection_type) || "2.4GHz (XInput)";
+                    tooltipText = name + " · " + conn;
+                    let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : (c && c.battery);
+                    if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
+                } else if (p.key === "keyboard") {
+                    let k = peripherals.keyboard || {};
+                    tooltipText = (k.name || "Machenike K500-B94") + " · USB-C · Hardware Safe Mode";
+                }
+
+                this._segPeripherals.add_child(this._makePillItem(icon, text, tone, null, tooltipText));
                 pillCount++;
             }
         } else {
@@ -1194,7 +1284,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     : "OFF";
                 let tone = !mouse.connected ? "muted" : (mouse.charging ? "ok" : pctSeverityClass(bat, threshold));
                 let icon = mouse.charging ? "battery-full-charging-symbolic" : "input-mouse-symbolic";
-                this._segPeripherals.add_child(this._makePillItem(icon, text, tone));
+                let tip = (mouse.name || "AJAZZ AJ179 V2") + " · " + (mouse.connection_type || "2.4GHz");
+                if (bat !== null && bat !== undefined) tip += " · Bateria " + bat + "%";
+                if (mouse.current_dpi || mouse.dpi) tip += " · " + (mouse.current_dpi || mouse.dpi) + " DPI";
+                this._segPeripherals.add_child(this._makePillItem(icon, text, tone, null, tip));
                 pillCount++;
             }
 
@@ -1206,7 +1299,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     ? (bat !== null && bat !== undefined ? bat + "%" : (headset.connection_type === "2.4GHz" ? "2.4GHz" : "BT"))
                     : "OFF";
                 let tone = !headset.connected ? "muted" : (headset.alsa_zero_bug ? "warn" : pctSeverityClass(bat, threshold));
-                this._segPeripherals.add_child(this._makePillItem("audio-headphones-symbolic", text, tone));
+                let tip = (headset.name || "Havit Fuxi H3") + " · " + (headset.connection_type || "2.4GHz");
+                if (bat !== null && bat !== undefined) tip += " · Bateria " + bat + "%";
+                if (headset.volume !== null && headset.volume !== undefined) tip += " · Vol " + headset.volume + "%";
+                this._segPeripherals.add_child(this._makePillItem("audio-headphones-symbolic", text, tone, null, tip));
                 pillCount++;
             }
 
@@ -1229,7 +1325,13 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                         tone = activeCtrl.active ? "info" : "muted";
                     }
                 }
-                this._segPeripherals.add_child(this._makePillItem("input-gaming-symbolic", text, tone));
+                let gpName = (activeCtrl && activeCtrl.name) || "GameSir Nova Lite";
+                let gpConn = (activeCtrl && activeCtrl.connection_type) || "2.4GHz (XInput)";
+                let tip = gpName + " · " + gpConn;
+                if (activeCtrl && activeCtrl.battery !== null && activeCtrl.battery !== undefined) {
+                    tip += " · Bateria " + activeCtrl.battery + "%";
+                }
+                this._segPeripherals.add_child(this._makePillItem("dpi-gamepad-symbolic", text, tone, null, tip));
                 pillCount++;
             }
 
@@ -1241,13 +1343,14 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 if (leds.numlock) flags.push("N");
                 let text = keyboard.connected ? (flags.length ? flags.join("") : "SAFE") : "OFF";
                 let tone = keyboard.connected ? "info" : "muted";
-                this._segPeripherals.add_child(this._makePillItem("input-keyboard-symbolic", text, tone));
+                let tip = (keyboard.name || "Machenike K500-B94") + " · USB-C · Hardware Safe Mode";
+                this._segPeripherals.add_child(this._makePillItem("input-keyboard-symbolic", text, tone, null, tip));
                 pillCount++;
             }
         }
 
         if (pillCount === 0) {
-            this._segPeripherals.add_child(this._makePillItem("input-mouse-symbolic", "Hub", "muted"));
+            this._segPeripherals.add_child(this._makePillItem("input-mouse-symbolic", "Hub", "muted", null, "Perifericos em Standby"));
         }
 
         // 2. Antigravity Segment
@@ -1284,12 +1387,20 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             dotClass = "dpi-dot-swarm";
         }
 
+        let planName = this._extractPlanName(ag.plan) || "Pro";
+        let activeModel = this._extractActiveModelName(ag.active_model) || "PBTXT";
+        let quotaDesc = pinnedQuota
+            ? (pinnedQuota.name || pinnedQuota.short_name || "AG") + " " + Math.round(Number(pinnedQuota.remaining_pct)) + "%"
+            : (capsuleAg.label || "OK");
+        let agTooltip = "Antigravity (" + planName + ") · Modelo: " + activeModel + " · Cota: " + quotaDesc;
+
         this._segAntigravity.add_child(
-            this._makePillItem("applications-science-symbolic", agText, agTone, dotClass)
+            this._makePillItem("applications-science-symbolic", agText, agTone, dotClass, agTooltip)
         );
         if (swarmCount > 0) {
+            let swarmTooltip = "Swarm Ativo · " + swarmCount + " subagente" + (swarmCount > 1 ? "s" : "") + " em execucao";
             this._segAntigravity.add_child(
-                this._makePillItem("network-workgroup-symbolic", String(swarmCount), "purple")
+                this._makePillItem("network-workgroup-symbolic", String(swarmCount), "purple", null, swarmTooltip)
             );
         }
 
@@ -1851,7 +1962,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         let header = this._buildCardHeader({
             cardKey: "gamepad",
-            icon: "input-gaming-symbolic",
+            icon: "dpi-gamepad-symbolic",
             title: "Controles GameSir / EasySMX",
             badgeText: statusText,
             badgeTone: statusTone,
@@ -2471,11 +2582,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        row.add_child(new St.Icon({
-            icon_name: opts.icon,
-            icon_type: St.IconType.SYMBOLIC,
-            icon_size: 16,
-        }));
+        if (opts.icon) {
+            row.add_child(this._makeDeviceIcon(opts.icon, null, 16));
+        }
 
         let titleCol = new St.BoxLayout({ vertical: true, x_expand: true });
         titleCol.add_child(new St.Label({

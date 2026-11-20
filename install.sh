@@ -28,9 +28,8 @@ if [ ! -d "${APPLET_SRC}" ]; then
     echo "[DPI] ERROR: Applet source directory not found at ${APPLET_SRC}" >&2
     exit 1
 fi
-mkdir -p "${HOME}/.local/share/cinnamon/applets"
-rm -rf "${APPLET_DEST}"
-cp -a "${APPLET_SRC}" "${APPLET_DEST}"
+mkdir -p "${APPLET_DEST}"
+cp -a "${APPLET_SRC}/." "${APPLET_DEST}/"
 echo "[DPI] Installed Cinnamon applet to ${APPLET_DEST}"
 
 # 3. Register applet in org.cinnamon enabled-applets at panel2:center:1 (next to calendar@cinnamon.org)

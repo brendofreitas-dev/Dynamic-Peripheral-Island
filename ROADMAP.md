@@ -23,8 +23,11 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ## Fase 3 — KDE Plasma 6 & Novos Periféricos Wireless (`v1.2.0` — Planejada)
 - [ ] **Widget Plasmoid (KDE Plasma 6 / QML)**: Cápsula nativa para o painel do Plasma 6 reutilizando o backend `dpi-hub`.
-- [ ] **Expansão de Drivers HID**:
-  - Suporte genérico a dispositivos **HID++** (Logitech) e **OpenRazer / Polychromatic** via bridge opcional sem quebrar a política zero-dependências do core.
+- [ ] **Expansão de Drivers HID & Compatibilidade Open-Source**:
+  - Adoção contínua das especificações de engenharia reversa documentadas no projeto open-source `krisgfx9/Wireless-Device-Battery-Monitor` (já inauguradas na v1.0.6 com o protocolo `0xFF7A` da GameSir):
+    - **Logitech HID++ 2.0 / 4.0**: telemetria de bateria nativa para mouses (MX Master, G Pro, G502) e teclados sem fio via features `0x0001` (Battery Level Status) e `0x1000` (Unified Battery) diretamente em `hidraw` sem `pip`.
+    - **Razer Wireless**: leitura de percentual de bateria e estado do dock de carregamento via pacotes vendor `0x02` (DeathAdder, Viper, Basilisk).
+    - **Corsair & SteelSeries Engine Wireless**: decodificação de telemetria de bateria (Dark Core, Scimitar, Aerox, Arctis Nova) via pacotes Raw HID vendor.
   - Suporte a teclados QMK/VIA com leitura de layer ativa via Raw HID.
   - Detecção estendida de baterias Bluetooth via `UPower` e `bluez` GATT Battery Service.
 - [ ] **Gráficos Históricos de Bateria**: Estimativa de autonomia restante dos periféricos baseada na taxa de descarga observada.

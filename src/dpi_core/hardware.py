@@ -1394,7 +1394,7 @@ class GamepadDriver:
     GAMESIR_ACTIVE_PID = "1041"
     GAMESIR_STANDBY_PID = "2106"
     GAMESIR_STANDBY_PIDS = frozenset({"2106"})
-    GAMESIR_ACTIVE_PIDS = frozenset({"1040", "1041"})
+    GAMESIR_ACTIVE_PIDS = frozenset({"1040", "1041", "1098", "100f"})
 
     EASYSMX_VID = "045e"
     EASYSMX_PID = "028e"
@@ -1560,6 +1560,122 @@ class GamepadDriver:
 
         return is_activity_fresh(last_ts, now_ts=now_ts, window=self.ACTIVITY_WINDOW_SEC)
 
+    def _read_gamesir_hid_battery(
+        self,
+        hidraw_nodes: List[Dict[str, Any]],
+        pid: str,
+    ) -> Tuple[Optional[int], bool]:
+        """Read live battery level and charging status of GameSir controller via 0xFF7A vendor HID."""
+        prefs = self._load_prefs()
+        gs_prefs = dict(prefs.get("gamesir_nova_lite", {}))
+        cached_last_battery = gs_prefs.get("last_battery")
+        if isinstance(cached_last_battery, (int, float)):
+            cached_last_battery = max(0, min(100, int(cached_last_battery)))
+        else:
+            cached_last_battery = None
+
+        target_pid = (pid or "").lower()
+        matching = [
+            n for n in hidraw_nodes
+            if n.get("vid") == self.GAMESIR_VID
+            and (n.get("pid") == target_pid if target_pid else n.get("pid") not in self.GAMESIR_STANDBY_PIDS)
+        ]
+        if not matching:
+            matching = [
+                n for n in hidraw_nodes
+                if n.get("vid") == self.GAMESIR_VID and n.get("pid") not in self.GAMESIR_STANDBY_PIDS
+            ]
+        if not matching:
+            return cached_last_battery, False
+
+        def _score_node(node: Dict[str, Any]) -> Tuple[int, int]:
+            rdesc = node.get("report_descriptor", b"")
+            has_ff7a = 1 if b"\x06\x7a\xff" in rdesc else 0
+            no_input = 1 if not node.get("has_input", False) else 0
+            return (has_ff7a, no_input)
+
+        matching.sort(key=_score_node, reverse=True)
+
+        # 65 bytes request: 0x00 Report ID + 0x01, 0x01 + 62 zeros
+        req = bytes([0x00, 0x01, 0x01]) + bytes(62)
+        timeout = 0.35
+
+        for node in matching:
+            dev_path = node.get("dev_path")
+            if not dev_path or not os.path.exists(dev_path):
+                continue
+            fd: Optional[int] = None
+            locked = False
+            try:
+                fd = os.open(dev_path, os.O_RDWR | os.O_NONBLOCK)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                    locked = True
+                except OSError:
+                    pass
+
+                # Drain pending packets
+                for _ in range(4):
+                    ready, _, _ = select.select([fd], [], [], 0.0)
+                    if not ready:
+                        break
+                    try:
+                        if not os.read(fd, 128):
+                            break
+                    except OSError:
+                        break
+
+                written = os.write(fd, req)
+                if written != len(req):
+                    continue
+
+                deadline = time.monotonic() + timeout
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    ready, _, _ = select.select([fd], [], [], remaining)
+                    if not ready:
+                        break
+                    resp = os.read(fd, 128)
+                    if not resp:
+                        break
+
+                    # Normalize response offset if prepended by Report ID 0x00
+                    r = resp
+                    if len(r) >= 20 and r[0] == 0x00:
+                        r = r[1:]
+
+                    # Skip async frames like 0xF4 or non-0x01 command responses
+                    if len(r) < 19 or r[0] != 0x01:
+                        continue
+
+                    val = r[18]
+                    if 0 <= val <= 100:
+                        bat = int(val)
+                        if gs_prefs.get("last_battery") != bat:
+                            gs_prefs["last_battery"] = bat
+                            prefs["gamesir_nova_lite"] = gs_prefs
+                            self._save_prefs(prefs)
+                        return bat, False
+                    elif val == 0xFF:
+                        return cached_last_battery, True
+            except OSError:
+                continue
+            finally:
+                if fd is not None:
+                    if locked:
+                        try:
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                        except OSError:
+                            pass
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+
+        return cached_last_battery, False
+
     def _find_gamepad_battery(self, keywords: Tuple[str, ...]) -> Tuple[Optional[int], bool]:
         for sup in _scan_power_supply(self.power_supply_root):
             hay = " ".join(
@@ -1610,6 +1726,13 @@ class GamepadDriver:
 
             bat, chg = self._find_gamepad_battery(("3537", "gamesir", "nova"))
             active_pid = primary["pid"] if primary else (gs_active_hid[0]["pid"] if gs_active_hid else "")
+            if bat is None:
+                hid_bat, hid_chg = self._read_gamesir_hid_battery(hidraw_nodes, active_pid)
+                if hid_bat is not None:
+                    bat = hid_bat
+                if hid_chg:
+                    chg = True
+
             if chg:
                 conn_type = "USB-C (Carregando)"
             elif active_pid == "1040":

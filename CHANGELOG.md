@@ -5,6 +5,22 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.6] - 2026-11-19
+
+### Adicionado
+- **FEAT-001 (Leitura de Bateria do GameSir Nova Lite via HID `0xFF7A`)**:
+  - `GamepadDriver` (`src/dpi_core/hardware.py`): implementado o método `_read_gamesir_hid_battery` baseado na especificação do projeto open-source `krisgfx9/Wireless-Device-Battery-Monitor`.
+  - Envio de frame de 65 bytes (`00 01 01`), descarte de frames assíncronos (`0xF4`), decodificação de `r[18]` (percentual de 0 a 100%) e detecção de status de carregamento (`r[18] == 0xFF`) com persistência em cache (`gamepad_state.json`).
+  - Suporte estendido aos PIDs `1040` (XInput), `1041` (HID/DInput), `1098` e `100f`.
+- **UX-007 (Ícone Customizado de Gamepad Vetorial & Tooltips Individuais na TopBar)**:
+  - Criado o arquivo vetorial `icons/dpi-gamepad-symbolic.svg` com silhueta ergonômica de controle moderno, compatível com `St.IconType.SYMBOLIC`.
+  - Implementados tooltips contextuais por dispositivo via `Tooltips.Tooltip` na TopBar com ciclo de vida gerenciado em `_pillTooltips` (exibindo nome do modelo, tipo de conexão, nível de bateria, DPI no mouse, volume no headset e status do Antigravity/Swarm).
+  - Atualizado `install.sh` para copiar recursivamente o diretório de ícones para o diretório de destino do Cinnamon.
+
+### Corrigido
+- **BUG-005 (Hover de Data/Hora de Volta para Periféricos ou Antigravity)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: contornado o bloqueio de eventos causado pelo `PopupMenuManager` do Calendário ao abrir (`calendar@cinnamon.org`), implementando um monitor leve `_calHoverTimerId` (60ms) ativo exclusivamente enquanto o calendário está aberto, usando `global.get_pointer()` e `_pointInActor` para fechar o calendário e abrir o segmento correspondente da Ilha Dinâmica de forma contínua e sem travamentos.
+
 ## [1.0.5] - 2026-11-19
 
 ### Corrigido

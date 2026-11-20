@@ -778,6 +778,91 @@ class TestGamepadDriver(unittest.TestCase):
             self.assertEqual(m_write.call_count, 2)
             self.assertEqual(m_ioctl.call_args_list[0][0][1], EVIOCSFF)
 
+    def test_gamesir_hid_battery_0xff7a_reading_and_charging_cache(self) -> None:
+        """FEAT-001: GameSir 0xFF7A vendor HID battery reading, charging 0xFF, and cache."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            hidraw_root = root / "hidraw"
+            _make_fake_hidraw_node(
+                hidraw_root,
+                "hidraw2",
+                "3537",
+                "1040",
+                hid_name="2.4G XBOX 360 For Windows",
+                has_input=False,
+                report_descriptor=b"\x06\x7a\xff\x09\x01\xa1\x01",
+            )
+            input_devices = root / "devices"
+            input_devices.write_text(
+                'I: Bus=0003 Vendor=3537 Product=1040 Version=0110\n'
+                'N: Name="Generic X-Box pad"\n'
+                'P: Phys=usb-0000:00:14.0-1/input0\n'
+                'H: Handlers=event11 js0\n'
+                'B: FF=1\n',
+                encoding="utf-8",
+            )
+
+            drv = GamepadDriver(
+                state_dir=state_dir,
+                hidraw_root=hidraw_root,
+                input_devices_path=input_devices,
+                power_supply_root=root / "power",
+                activity_dir=root / "tmp",
+                dev_input_root=root / "dev_input",
+            )
+
+            # Response 1: async state packet (0xF4) -> must be skipped
+            async_pkt = bytes([0xF4, 0x00, 0x00]) + bytes(17)
+            # Response 2: valid device info with 0x00 Report ID prefix, r[0]=0x01, r[18]=76
+            valid_info = bytes([0x00, 0x01]) + bytes(17) + bytes([76])
+
+            written_packets = []
+
+            def fake_write(fd, data):
+                written_packets.append(data)
+                return len(data)
+
+            def fake_select(rlist, wlist, xlist, timeout=None):
+                if timeout == 0.0:
+                    return ([], [], [])
+                return ([rlist[0]], [], [])
+
+            with mock.patch("dpi_core.hardware.os.open", return_value=88), \
+                 mock.patch("dpi_core.hardware.os.close"), \
+                 mock.patch("dpi_core.hardware.fcntl.flock"), \
+                 mock.patch("dpi_core.hardware.os.path.exists", return_value=True), \
+                 mock.patch("dpi_core.hardware.select.select", side_effect=fake_select), \
+                 mock.patch("dpi_core.hardware.os.write", side_effect=fake_write), \
+                 mock.patch("dpi_core.hardware.os.read", side_effect=[async_pkt, valid_info]):
+                state = drv.read_state(now_ts=1000.0)
+
+            self.assertTrue(state["connected"])
+            self.assertTrue(state["active"])
+            ctrl = state["controllers"][0]
+            self.assertEqual(ctrl["battery"], 76)
+            self.assertFalse(ctrl["charging"])
+            self.assertEqual(len(written_packets), 1)
+            self.assertEqual(len(written_packets[0]), 65)
+            self.assertEqual(list(written_packets[0][:3]), [0x00, 0x01, 0x01])
+
+            # Charging mode: r[18] == 0xFF returns cached last battery (76) and charging=True
+            chg_info = bytes([0x00, 0x01]) + bytes(17) + bytes([0xFF])
+            with mock.patch("dpi_core.hardware.os.open", return_value=88), \
+                 mock.patch("dpi_core.hardware.os.close"), \
+                 mock.patch("dpi_core.hardware.fcntl.flock"), \
+                 mock.patch("dpi_core.hardware.os.path.exists", return_value=True), \
+                 mock.patch("dpi_core.hardware.select.select", side_effect=fake_select), \
+                 mock.patch("dpi_core.hardware.os.write", return_value=65), \
+                 mock.patch("dpi_core.hardware.os.read", return_value=chg_info):
+                state_chg = drv.read_state(now_ts=1000.0)
+
+            ctrl_chg = state_chg["controllers"][0]
+            self.assertEqual(ctrl_chg["battery"], 76)
+            self.assertTrue(ctrl_chg["charging"])
+            self.assertEqual(ctrl_chg["connection_type"], "USB-C (Carregando)")
+
 
 class TestHardwareHubManager(unittest.TestCase):
     """Tests transition alerts and action dispatch in HardwareHubManager."""

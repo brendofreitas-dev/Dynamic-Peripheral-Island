@@ -189,6 +189,37 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes unitários verificando a lógica de `menuEventFilter`, `calMenu.connect("open-state-changed")` e timers de hover.
 - **Validação**: Suíte completa de 31 testes aprovada e navegação contínua por hover validada no Cinnamon Desktop sem vazamento de memória ou eventos órfãos.
 
+### `FEAT-001` — Leitura de Bateria do GameSir Nova Lite via Protocolo HID `0xFF7A` (`2026-11-19`)
+- **Severidade**: Funcionalidade Crítica (telemetria de bateria em gamepad sem fio).
+- **Causa & Racional Técnico**:
+  - Em modo XInput (`3537:1040`), o kernel Linux não expõe nós padrão de bateria em `/sys/class/power_supply` para gamepads genéricos Xbox 360 sem fio.
+  - Com base na especificação de engenharia reversa do projeto open-source MIT `krisgfx9/Wireless-Device-Battery-Monitor` (`gamesir.cpp`), identificou-se que o receptor USB da GameSir implementa a Usage Page Vendor `0xFF7A`.
+  - O envio de um pacote somente-leitura de 65 bytes (`bytes([0x00, 0x01, 0x01]) + bytes(62)`) ao endpoint `hidraw` apropriado retorna um frame de resposta onde o byte 18 (`r[18]`) indica o percentual exato de carga (`0` a `100`), ou o valor `0xFF` indicando carregamento ativo com conexão USB-C cabeada.
+- **Arquivos Modificados**:
+  - `src/dpi_core/hardware.py`: adição do método `_read_gamesir_hid_battery(hidraw_nodes, pid)` com filtragem de nós da `3537` (priorizando `0xFF7A` e nós sem subsistema `input`), serialização via `fcntl.flock(LOCK_EX)`, descarte de pacotes assíncronos (`0xF4`), persistência de cache em `gamepad_state.json` e integração com `GamepadDriver.read_state()`.
+  - `tests/test_hardware.py`: adição do teste unitário `test_gamesir_hid_battery_0xff7a_reading_and_charging_cache`.
+- **Validação**: 32/32 testes aprovados e validação com simulação determinística de frames de resposta.
+
+### `UX-007` — Ícone Customizado de Gamepad Vetorial & Tooltips Individuais na TopBar (`2026-11-19`)
+- **Severidade**: Média (ergonomia visual e identificação clara de periféricos na barra do Cinnamon).
+- **Causa Raiz**:
+  - O applet utilizava o ícone genérico do sistema (`input-gaming-symbolic`) que variava dependendo do tema de ícones do Linux Mint, além de não fornecer informações detalhadas de cada dispositivo ao passar o cursor pela TopBar sem clicar.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/icons/dpi-gamepad-symbolic.svg`: criação do asset vetorial SVG simbólico (viewBox `0 0 16 16`, compatível com `St.IconType.SYMBOLIC`) desenhado sob o design system UI/UX Pro Max.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: helper `_makeDeviceIcon` para carregamento dinâmico via `Gio.icon_new_for_string`; importação de `imports.ui.tooltips`; desativação do tooltip global e adição de tooltips contextuais por dispositivo com ciclo de vida rastreado em `this._pillTooltips` (destruição limpa em `_clearPillTooltips` para prevenir vazamentos de memória).
+  - `install.sh`: atualização do comando de cópia (`cp -a "${APPLET_SRC}/." "${APPLET_DEST}/"`) para garantir a instalação do diretório `icons/`.
+  - `tests/test_cli_and_applet.py`: testes de integridade XML do SVG e verificação da arquitetura de tooltips.
+- **Validação**: Suíte completa de testes aprovada, ícone renderizado com sucesso no Cinnamon e tooltips contextuais exibidos ao passar o mouse.
+
+### `BUG-005` — Bloqueio do Hover entre Calendário Nativo e Segmentos da Ilha Dinâmica (`2026-11-19`)
+- **Severidade**: Média (quebrava a navegação contínua por hover introduzida na v1.0.5 ao abrir o calendário).
+- **Causa Raiz**:
+  - Ao abrir o calendário nativo do Cinnamon (`calendar@cinnamon.org`), a sua instância interna de `PopupMenuManager` anexa um listener de captura no `global.stage.connect('enter-event')` e retorna `Clutter.EVENT_STOP`, interceptando e cancelando qualquer sinal de entrada que o applet da ilha tentasse escutar.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: substituição do listener passivo de `enter-event` por um timer leve de pooling de cursor `this._calHoverTimerId = GLib.timeout_add(60, ...)` ativado **exclusivamente** durante o estado `calMenu.isOpen === true` (0% de impacto de CPU com o calendário fechado); a cada 60ms, consulta as coordenadas reais do ponteiro via `global.get_pointer()` e testa contenção via `_pointInActor(actor, px, py)` com coordenadas transformadas, fechando o calendário e abrindo o Popover no segmento correspondente de forma instantânea.
+  - `tests/test_cli_and_applet.py`: testes cobrindo a presença do monitor `_calHoverTimerId`, `global.get_pointer` e `_pointInActor`.
+- **Validação**: Verificação em runtime no Cinnamon Desktop com transição imediata e sem travamentos ao deslizar o mouse entre o Calendário e os segmentos da ilha.
+
 ---
 
 ## 5. Procedimentos de Rollback

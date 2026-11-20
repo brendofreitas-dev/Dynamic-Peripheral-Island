@@ -400,6 +400,19 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_tabHoverTimerId", src)
         self.assertIn("_cancelTabHoverTimer", src)
 
+        # BUG-005: Calendar -> Island hover monitor via _calHoverTimerId, global.get_pointer, and _pointInActor
+        self.assertIn("_calHoverTimerId", src)
+        self.assertIn("global.get_pointer", src)
+        self.assertIn("_pointInActor(actor, px, py)", src)
+
+        # UX-007: Custom device icons and per-device individual tooltips in TopBar
+        self.assertIn("const Tooltips = imports.ui.tooltips;", src)
+        self.assertIn("new Tooltips.Tooltip(", src)
+        self.assertIn("this._pillTooltips", src)
+        self.assertIn("_clearPillTooltips()", src)
+        self.assertIn("_makeDeviceIcon(", src)
+        self.assertIn('this.set_applet_tooltip("")', src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -606,6 +619,8 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("org.Cinnamon.ReloadXlet", install_text)
 
     def test_documentation_and_design_system_files_exist_and_non_empty(self) -> None:
+        import xml.etree.ElementTree as ET
+
         required_docs = [
             "README.md",
             "CHANGELOG.md",
@@ -616,6 +631,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             "design-system/dynamic-peripheral-island/MASTER.md",
             "design-system/dynamic-peripheral-island/tokens.json",
             "design-system/dynamic-peripheral-island/tokens.css",
+            "applet/dynamic-peripheral-island@brendo/icons/dpi-gamepad-symbolic.svg",
             "udev/99-dynamic-peripheral-island.rules",
             "LICENSE",
             ".gitignore",
@@ -625,6 +641,13 @@ class TestAppletCssAndDocs(unittest.TestCase):
             self.assertTrue(p.is_file(), msg=f"Missing required file: {rel}")
             content = p.read_text(encoding="utf-8").strip()
             self.assertGreater(len(content), 20, msg=f"File appears empty/trivial: {rel}")
+
+        # Validate SVG XML structure
+        svg_path = ROOT_DIR / "applet" / "dynamic-peripheral-island@brendo" / "icons" / "dpi-gamepad-symbolic.svg"
+        tree = ET.parse(str(svg_path))
+        root = tree.getroot()
+        self.assertTrue(root.tag.endswith("svg"))
+        self.assertEqual(root.attrib.get("viewBox"), "0 0 16 16")
 
 
 if __name__ == "__main__":

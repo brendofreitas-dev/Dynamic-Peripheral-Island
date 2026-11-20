@@ -32,7 +32,10 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
 ```
 
 - **Layout Central Balanceado**: organiza os **Periféricos** à esquerda, o relógio do sistema (**Data e Hora** via `calendar@cinnamon.org`) no centro e o monitor de **Antigravity** à direita.
-- **Dynamic Island Hover-Only**: 100% transparente e discreta em repouso; ao passar o cursor sobre a região central ou abrir o menu, revela a cápsula fluida de glassmorphism (`.dpi-capsule-hovered` / `.dpi-capsule-open`), com hover nativo individual do SystemTray (`.applet-box`).
+- **Estágio 1 — Apple Notch na TopBar**: geometria característica colada na borda superior da tela (`border-radius: 0 0 14px 14px`), 100% transparente em repouso e revelando acabamento LiquidGlass translúcido com borda inferior luminosa ao passar o cursor (`.dpi-capsule-hovered` / `.dpi-capsule-open`).
+- **Estágio 2 — Notchy Peek Intermediário (`notchy.dev`)**: container flutuante de 480px que desce suavemente do Notch após 220ms de hover contínuo, exibindo mini-player do Spotify/Mídia com controles rápidos de transporte (`Prev`, `Play/Pause`, `Next`), status da cota Antigravity e botão `Expandir` para acesso instantâneo ao Popover completo.
+- **Estágio 3 — Popover Bento Grid Completo**: painel de 700px fixos em 2 colunas com 4 abas (`Periféricos`, `Áudio`, `Antigravity VU`, `Ajustes`), transições 100% GPU sem flash em branco e zero barras de rolagem vertical.
+- **Tooltips Animados LiquidGlass**: microinteração flutuante suave com escala e slide, equipada com algoritmo anti-colisão que se posiciona automaticamente abaixo do Notchy Peek.
 - **Segmento Periféricos**: exibe dispositivos fixados (`pin_*`) ou ativos; clique abre diretamente a aba **Periféricos**.
 - **Segmento Data/Hora**: preserva o calendário nativo do Cinnamon integrado harmoniosamente à ilha.
 - **Segmento Antigravity**: exibe a cota fixada (`auto` para a menor ou grupo específico) e contador do Swarm; clique abre diretamente a aba **Antigravity VU**.

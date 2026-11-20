@@ -5,6 +5,29 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2026-11-20
+
+### Adicionado
+- **FEAT-006 (Estágio Intermediário Notchy Peek Inspirado no notchy.dev)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Implementado o container flutuante `this._peekActor` (`.dpi-notch-peek`) de 480px montado em `Main.uiGroup`, introduzindo uma navegação progressiva em 3 estágios: Cápsula Notch recolhida -> Notchy Peek intermediário -> Popover Bento Grid completo.
+    - Faixa compacta horizontal com mini-player do Spotify/Mídia à esquerda (título e artista truncados, ícone e controles de transporte em 1 clique: `--media-prev`, `--media-play-pause`, `--media-next`), com fallback automático para resumo de periféricos conectados quando a mídia estiver inativa.
+    - Lado direito com pill de modelo/cota Antigravity e botão simbólico `Expandir` (`pan-down-symbolic`) para abertura imediata do Popover de 4 abas.
+    - Animação de descida a partir do Notch (`translation_y: -14 -> 0`, `scale_y: 0.92 -> 1.0`, `opacity: 0 -> 255` em 260ms via `Clutter.AnimationMode.EASE_OUT_CUBIC`) ativada após 220ms de hover contínuo no Notch.
+    - Grace timer de 240ms para movimentação segura do cursor entre a cápsula e os botões de reprodução, com retração suave em 200ms (`translation_y: 0 -> -12`, `opacity: 255 -> 0`).
+    - Fechamento instantâneo ao abrir o Popover completo ou o Calendário nativo.
+- **UX-017 (Estética Apple Notch na TopBar e Tooltips Animados LiquidGlass)**:
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`:
+    - Cápsula da TopBar (`.dpi-unified-capsule` e `.dpi-standalone-capsule`) redesenhada com geometria de **Apple Notch** fixada no topo da tela (`border-radius: 0 0 14px 14px;`, `margin-top: 0; padding: 0 10px 2px 10px;`).
+    - Acabamento LiquidGlass escuro translúcido (`rgba(15, 16, 24, 0.90)` dark / `rgba(248, 250, 252, 0.94)` light) com borda inferior luminosa (`rgba(255, 255, 255, 0.14)`) nos estados hovered e open.
+    - Estilização do Notchy Peek (`.dpi-notch-peek`) com `border-radius: 0 0 18px 18px;` e drop-shadow profunda.
+    - Nova classe `.dpi-glass-tooltip` com cantos de 6px, fundo translúcido e bordas especulares.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Container `this._tooltipActor` implementando tooltips animados LiquidGlass (`_showAnimatedTooltip`, `_hideAnimatedTooltip`) nos itens e pills da TopBar.
+    - Transição fluida de entrada em 180ms (`opacity`, `translation_y: -6 -> 0`, `scale: 0.95 -> 1.0`) e saída em 130ms.
+    - Posicionamento inteligente anti-colisão: caso o Notchy Peek esteja aberto, o tooltip se posiciona automaticamente abaixo do Peek (`peekBottom + 6px`), evitando sobreposição.
+    - Limpeza rigorosa no ciclo de vida em `on_applet_removed_from_panel()` destruindo atores em `Main.uiGroup` e cancelando timers de hover/peek/tooltip.
+
 ## [1.1.2] - 2026-11-20
 
 ### Corrigido / Aprimorado

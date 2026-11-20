@@ -166,6 +166,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._calHoverTimerId = 0;
         this._tabHoverTimerId = 0;
         this._repositionIdleId = 0;
+        this._peekActor = null;
+        this._peekShowTimerId = 0;
+        this._peekHideTimerId = 0;
+        this._tooltipActor = null;
+        this._tooltipLabel = null;
+        this._tooltipTimerId = 0;
         this._pillTooltips = [];
         this._taggedClockActors = [];
         this._hoverSignals = [];
@@ -187,6 +193,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Build Popover Bento Menu
         this._buildPopover(orientation);
+
+        // Initialize Notch Peek intermediate stage (FEAT-006)
+        this._initNotchPeek();
+
+        // Initialize Animated LiquidGlass Tooltip (UX-017)
+        this._initAnimatedTooltip();
 
         // Register global shortcut Super + Alt + I
         try {
@@ -293,6 +305,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
         if (this._popoverRoot) {
             this._applyThemeToActor(this._popoverRoot, this._resolvedTheme);
+        }
+        if (this._peekActor) {
+            this._applyThemeToActor(this._peekActor, this._resolvedTheme);
+        }
+        if (this._tooltipActor) {
+            this._applyThemeToActor(this._tooltipActor, this._resolvedTheme);
         }
     }
 
@@ -420,6 +438,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _clearPillTooltips() {
+        this._hideAnimatedTooltip();
         if (Array.isArray(this._pillTooltips)) {
             for (let tip of this._pillTooltips) {
                 try {
@@ -461,12 +480,15 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (tooltipText) {
             item.reactive = true;
             item.track_hover = true;
-            try {
-                let tip = new Tooltips.Tooltip(item, String(tooltipText));
-                this._pillTooltips.push(tip);
-            } catch (e) {
-                // ignore
-            }
+            // UX-017: Animated LiquidGlass tooltip replaces static new Tooltips.Tooltip()
+            item.connect("enter-event", () => {
+                this._showAnimatedTooltip(item, tooltipText);
+                return Clutter.EVENT_PROPAGATE;
+            });
+            item.connect("leave-event", () => {
+                this._hideAnimatedTooltip();
+                return Clutter.EVENT_PROPAGATE;
+            });
         }
         return item;
     }
@@ -499,8 +521,39 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (isEntering) {
             this._hoverCounter = (this._hoverCounter || 0) + 1;
             box.add_style_class_name("dpi-capsule-hovered");
+
+            // FEAT-006: Cancel any pending peek hide timer
+            if (this._peekHideTimerId) {
+                GLib.source_remove(this._peekHideTimerId);
+                this._peekHideTimerId = 0;
+            }
+
+            // Schedule Notchy Peek entrance after 220ms hover if menu & calendar are closed
+            let calMenu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
+            let calOpen = Boolean(calMenu && calMenu.isOpen);
+            let menuOpen = Boolean(this.menu && this.menu.isOpen);
+
+            if (!menuOpen && !calOpen && (!this._peekActor || !this._peekActor.visible)) {
+                if (!this._peekShowTimerId) {
+                    this._peekShowTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 220, () => {
+                        this._peekShowTimerId = 0;
+                        if (!this._destroyed && (!this.menu || !this.menu.isOpen)) {
+                            this._showNotchPeek();
+                        }
+                        return GLib.SOURCE_REMOVE;
+                    });
+                }
+            }
         } else {
             this._hoverCounter = Math.max(0, (this._hoverCounter || 0) - 1);
+            if (this._peekShowTimerId) {
+                GLib.source_remove(this._peekShowTimerId);
+                this._peekShowTimerId = 0;
+            }
+            if (this._peekActor && this._peekActor.visible) {
+                this._startPeekHideGrace();
+            }
+
             this._hoverLeaveTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
                 this._hoverLeaveTimerId = 0;
                 if (this._destroyed) return GLib.SOURCE_REMOVE;
@@ -514,7 +567,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
                 let menuOpen = Boolean(this.menu && this.menu.isOpen);
                 let alertActive = Boolean(this._morphPill && this._morphPill.visible);
-                if (!anyHover && this._hoverCounter <= 0 && !menuOpen && !alertActive) {
+                let peekActive = Boolean(this._peekActor && this._peekActor.visible);
+                if (!anyHover && this._hoverCounter <= 0 && !menuOpen && !alertActive && !peekActive) {
                     box.remove_style_class_name("dpi-capsule-hovered");
                 }
                 return GLib.SOURCE_REMOVE;
@@ -527,7 +581,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (!box) return;
         let menuOpen = Boolean(this.menu && this.menu.isOpen);
         let alertActive = Boolean(this._morphPill && this._morphPill.visible);
-        if (menuOpen || alertActive) {
+        let peekActive = Boolean(this._peekActor && this._peekActor.visible);
+        if (menuOpen || alertActive || peekActive) {
             box.add_style_class_name("dpi-capsule-open");
         } else {
             box.remove_style_class_name("dpi-capsule-open");
@@ -623,6 +678,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _onCalendarOpenStateChanged(isOpen) {
         if (this._destroyed) return;
         if (isOpen) {
+            this._hideNotchPeek(true);
+            this._hideAnimatedTooltip();
             this._startCalHoverMonitor();
         } else {
             this._stopCalHoverMonitor();
@@ -788,8 +845,39 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._repositionIdleId);
             this._repositionIdleId = 0;
         }
+        if (this._peekShowTimerId) {
+            GLib.source_remove(this._peekShowTimerId);
+            this._peekShowTimerId = 0;
+        }
+        if (this._peekHideTimerId) {
+            GLib.source_remove(this._peekHideTimerId);
+            this._peekHideTimerId = 0;
+        }
+        if (this._tooltipTimerId) {
+            GLib.source_remove(this._tooltipTimerId);
+            this._tooltipTimerId = 0;
+        }
         this._cancelTabHoverTimer();
         this._disconnectCalMenu();
+
+        if (this._peekActor) {
+            try {
+                Main.uiGroup.remove_actor(this._peekActor);
+                this._peekActor.destroy();
+            } catch (e) {
+                // ignore
+            }
+            this._peekActor = null;
+        }
+        if (this._tooltipActor) {
+            try {
+                Main.uiGroup.remove_actor(this._tooltipActor);
+                this._tooltipActor.destroy();
+            } catch (e) {
+                // ignore
+            }
+            this._tooltipActor = null;
+        }
 
         for (let item of this._themeSignalIds) {
             try {
@@ -922,6 +1010,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _openTabFromSegment(tabName) {
         if (!this.menu) return;
+        this._hideNotchPeek(true);
+        this._hideAnimatedTooltip();
         if (this.menu.isOpen && this._activeTab === tabName) {
             this.menu.close(true);
             return;
@@ -939,6 +1029,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _toggleIsland() {
         if (!this.menu) return;
+        this._hideNotchPeek(true);
+        this._hideAnimatedTooltip();
         this.menu.sourceActor = this._unifiedCenterBox || this._calendarActor || this.actor;
         if (this.menu.isOpen) {
             this.menu.close(true);
@@ -1475,6 +1567,11 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Update active highlight on segments when menu is open
         this._syncSegmentHighlight();
+
+        // Refresh Notch Peek content if it is actively visible
+        if (this._peekActor && this._peekActor.visible) {
+            this._renderPeekContent();
+        }
     }
 
     _selectTopBarQuota(ag, pinnedId) {
@@ -1509,6 +1606,380 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     /* ======================================================================
+     * Apple Notch Peek & Animated Tooltips (FEAT-006 & UX-017)
+     * ====================================================================== */
+
+    _initNotchPeek() {
+        if (this._peekActor) return;
+        this._peekActor = new St.BoxLayout({
+            reactive: true,
+            track_hover: true,
+            style_class: "dpi-notch-peek dpi-theme-dark",
+            vertical: false,
+            style: "spacing: 10px;",
+        });
+        this._peekActor.connect("enter-event", () => {
+            if (this._peekHideTimerId) {
+                GLib.source_remove(this._peekHideTimerId);
+                this._peekHideTimerId = 0;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this._peekActor.connect("leave-event", () => {
+            this._startPeekHideGrace();
+            return Clutter.EVENT_PROPAGATE;
+        });
+        try {
+            Main.uiGroup.add_actor(this._peekActor);
+        } catch (e) {
+            // ignore
+        }
+        this._peekActor.hide();
+    }
+
+    _makePeekBtn(iconName, tooltip, onClick) {
+        let btn = new St.Button({
+            style_class: "dpi-peek-btn",
+            can_focus: true,
+            child: new St.Icon({
+                icon_name: iconName,
+                icon_type: St.IconType.SYMBOLIC,
+                icon_size: 13,
+            }),
+        });
+        if (tooltip) {
+            btn.connect("enter-event", () => {
+                this._showAnimatedTooltip(btn, tooltip);
+                return Clutter.EVENT_PROPAGATE;
+            });
+            btn.connect("leave-event", () => {
+                this._hideAnimatedTooltip();
+                return Clutter.EVENT_PROPAGATE;
+            });
+        }
+        btn.connect("clicked", onClick);
+        return btn;
+    }
+
+    _renderPeekContent() {
+        if (!this._peekActor) return;
+        this._peekActor.destroy_all_children();
+
+        let media = (this._data && this._data.media) || {};
+        let ag = (this._data && this._data.antigravity) || {};
+        let devices = this._getDevicesMap();
+
+        // 1. Left section: Spotify / Media or Peripherals summary
+        let leftBox = new St.BoxLayout({
+            style: "spacing: 8px;",
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        if (media && media.available) {
+            leftBox.add_child(new St.Icon({
+                icon_name: "multimedia-player-symbolic",
+                icon_type: St.IconType.SYMBOLIC,
+                icon_size: 14,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+
+            let trackCol = new St.BoxLayout({
+                vertical: true,
+                style: "spacing: 1px;",
+                x_expand: true,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            let titleLbl = new St.Label({
+                text: media.title || "Spotify",
+                style_class: "dpi-peek-media-title",
+            });
+            titleLbl.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            titleLbl.clutter_text.max_length = 26;
+            trackCol.add_child(titleLbl);
+
+            let artistText = media.artist || "Tocando";
+            if (media.album) artistText += " · " + media.album;
+            let artistLbl = new St.Label({
+                text: artistText,
+                style_class: "dpi-peek-media-artist",
+            });
+            artistLbl.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            artistLbl.clutter_text.max_length = 32;
+            trackCol.add_child(artistLbl);
+            leftBox.add_child(trackCol);
+
+            // Transport controls
+            let ctrlRow = new St.BoxLayout({ style: "spacing: 4px;", y_align: Clutter.ActorAlign.CENTER });
+            ctrlRow.add_child(this._makePeekBtn("media-skip-backward-symbolic", "Anterior", () => {
+                this._dispatchCliAction(["--media-prev"], "Faixa anterior...");
+            }));
+            let isPlaying = media.status === "Playing";
+            ctrlRow.add_child(this._makePeekBtn(
+                isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic",
+                isPlaying ? "Pausar" : "Reproduzir",
+                () => {
+                    this._dispatchCliAction(["--media-play-pause"], "Play/Pause...");
+                }
+            ));
+            ctrlRow.add_child(this._makePeekBtn("media-skip-forward-symbolic", "Próxima", () => {
+                this._dispatchCliAction(["--media-next"], "Próxima faixa...");
+            }));
+            leftBox.add_child(ctrlRow);
+        } else {
+            leftBox.add_child(new St.Icon({
+                icon_name: "input-mouse-symbolic",
+                icon_type: St.IconType.SYMBOLIC,
+                icon_size: 14,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            let mouse = devices.mouse || {};
+            let batText = mouse.battery !== null && mouse.battery !== undefined ? mouse.battery + "%" : (mouse.connected ? "Ativo" : "--");
+            leftBox.add_child(new St.Label({
+                text: "Mouse: " + batText,
+                style_class: "dpi-peek-media-title",
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+
+            let headset = devices.headset || {};
+            if (headset.connected) {
+                leftBox.add_child(new St.Label({ text: "·", style_class: "dpi-subtitle", y_align: Clutter.ActorAlign.CENTER }));
+                leftBox.add_child(new St.Icon({
+                    icon_name: "audio-headphones-symbolic",
+                    icon_type: St.IconType.SYMBOLIC,
+                    icon_size: 14,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+                let hBat = headset.battery !== null && headset.battery !== undefined ? headset.battery + "%" : "Ativo";
+                leftBox.add_child(new St.Label({
+                    text: "Headset: " + hBat,
+                    style_class: "dpi-peek-media-title",
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
+        }
+        this._peekActor.add_child(leftBox);
+
+        // 2. Right container: Antigravity quota pill + Expand button
+        let rightBox = new St.BoxLayout({
+            style: "spacing: 6px;",
+            x_expand: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+
+        let activeModel = this._extractActiveModelName(ag.active_model) || "Argon";
+        let quotas = Array.isArray(ag.quotas) ? ag.quotas : [];
+        let quotaStr = activeModel;
+        if (quotas.length > 0) {
+            let primaryQ = quotas[0];
+            quotaStr = (primaryQ.short_name || primaryQ.name || activeModel) + " " + Math.round(Number(primaryQ.remaining_pct) || 0) + "%";
+        }
+        rightBox.add_child(this._makeBadge(quotaStr, "purple"));
+
+        let expandBtn = new St.Button({
+            style_class: "dpi-peek-expand-btn",
+            can_focus: true,
+            child: new St.BoxLayout({
+                style: "spacing: 4px;",
+                y_align: Clutter.ActorAlign.CENTER,
+            }),
+        });
+        expandBtn.child.add_child(new St.Icon({
+            icon_name: "pan-down-symbolic",
+            icon_type: St.IconType.SYMBOLIC,
+            icon_size: 12,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        expandBtn.child.add_child(new St.Label({
+            text: "Expandir",
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        expandBtn.connect("clicked", () => {
+            this._hideNotchPeek(true);
+            if (this.menu && !this.menu.isOpen) {
+                this.menu.open(true);
+            }
+        });
+        rightBox.add_child(expandBtn);
+
+        this._peekActor.add_child(rightBox);
+    }
+
+    _positionNotchPeek() {
+        if (!this._peekActor) return;
+        let box = this._unifiedCenterBox || this.actor;
+        if (!box || !box.get_stage()) return;
+
+        let [bx, by] = box.get_transformed_position();
+        let [bw, bh] = box.get_transformed_size();
+
+        let peekW = this._peekActor.width || 480;
+        let posX = Math.round(bx + (bw - peekW) / 2);
+        let posY = Math.round(by + bh);
+
+        this._peekActor.set_position(posX, posY);
+    }
+
+    _showNotchPeek() {
+        if (this._destroyed || (this.menu && this.menu.isOpen)) return;
+        let calMenu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
+        if (calMenu && calMenu.isOpen) return;
+
+        this._renderPeekContent();
+        this._positionNotchPeek();
+        this._peekActor.remove_all_transitions();
+        this._peekActor.opacity = 0;
+        this._peekActor.translation_y = -14;
+        this._peekActor.scale_y = 0.92;
+        this._peekActor.show();
+
+        this._peekActor.ease({
+            opacity: 255,
+            translation_y: 0,
+            scale_y: 1.0,
+            duration: 260,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
+        this._syncCapsuleOpenState();
+    }
+
+    _startPeekHideGrace() {
+        if (this._peekHideTimerId) {
+            GLib.source_remove(this._peekHideTimerId);
+            this._peekHideTimerId = 0;
+        }
+        this._peekHideTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 240, () => {
+            this._peekHideTimerId = 0;
+            if (this._destroyed) return GLib.SOURCE_REMOVE;
+            if (typeof global.get_pointer === "function") {
+                let [px, py] = global.get_pointer();
+                let box = this._unifiedCenterBox || this.actor;
+                if (this._pointInActor(box, px, py) || this._pointInActor(this._peekActor, px, py)) {
+                    return GLib.SOURCE_REMOVE;
+                }
+            }
+            this._hideNotchPeek(false);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _hideNotchPeek(instant = false) {
+        if (this._peekShowTimerId) {
+            GLib.source_remove(this._peekShowTimerId);
+            this._peekShowTimerId = 0;
+        }
+        if (this._peekHideTimerId) {
+            GLib.source_remove(this._peekHideTimerId);
+            this._peekHideTimerId = 0;
+        }
+        if (!this._peekActor || !this._peekActor.visible) return;
+
+        if (instant) {
+            this._peekActor.remove_all_transitions();
+            this._peekActor.hide();
+            this._syncCapsuleOpenState();
+            return;
+        }
+
+        this._peekActor.remove_all_transitions();
+        this._peekActor.ease({
+            opacity: 0,
+            translation_y: -12,
+            duration: 200,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => {
+                if (!this._destroyed && this._peekActor) {
+                    this._peekActor.hide();
+                }
+                this._syncCapsuleOpenState();
+            },
+        });
+    }
+
+    _initAnimatedTooltip() {
+        if (this._tooltipActor) return;
+        this._tooltipActor = new St.BoxLayout({
+            reactive: false,
+            style_class: "dpi-glass-tooltip dpi-theme-dark",
+            vertical: false,
+        });
+        this._tooltipLabel = new St.Label({
+            text: "",
+            style_class: "dpi-tooltip-text",
+        });
+        this._tooltipActor.add_child(this._tooltipLabel);
+        try {
+            Main.uiGroup.add_actor(this._tooltipActor);
+        } catch (e) {
+            // ignore
+        }
+        this._tooltipActor.hide();
+    }
+
+    _showAnimatedTooltip(sourceActor, text) {
+        if (this._destroyed || !sourceActor || !text || (this.menu && this.menu.isOpen)) return;
+        if (!sourceActor.get_stage() || !this._tooltipActor) return;
+
+        if (this._tooltipTimerId) {
+            GLib.source_remove(this._tooltipTimerId);
+            this._tooltipTimerId = 0;
+        }
+
+        this._tooltipLabel.text = String(text);
+
+        let [ax, ay] = sourceActor.get_transformed_position();
+        let [aw, ah] = sourceActor.get_transformed_size();
+
+        let tipW = this._tooltipActor.get_preferred_width(-1)[1] || 100;
+        let tipX = Math.round(ax + (aw - tipW) / 2);
+        let tipY = Math.round(ay + ah + 4);
+
+        if (this._peekActor && this._peekActor.visible) {
+            let [px, py] = this._peekActor.get_transformed_position();
+            let [pw, ph] = this._peekActor.get_transformed_size();
+            tipY = Math.round(py + ph + 6);
+        }
+
+        this._tooltipActor.set_position(tipX, tipY);
+        this._tooltipActor.remove_all_transitions();
+        this._tooltipActor.opacity = 0;
+        this._tooltipActor.translation_y = -6;
+        this._tooltipActor.scale_x = 0.95;
+        this._tooltipActor.scale_y = 0.95;
+        this._tooltipActor.show();
+
+        this._tooltipActor.ease({
+            opacity: 255,
+            translation_y: 0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            duration: 180,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
+    }
+
+    _hideAnimatedTooltip() {
+        if (this._tooltipTimerId) {
+            GLib.source_remove(this._tooltipTimerId);
+            this._tooltipTimerId = 0;
+        }
+        if (!this._tooltipActor || !this._tooltipActor.visible) return;
+
+        this._tooltipActor.remove_all_transitions();
+        this._tooltipActor.ease({
+            opacity: 0,
+            translation_y: -4,
+            duration: 130,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onComplete: () => {
+                if (!this._destroyed && this._tooltipActor) {
+                    this._tooltipActor.hide();
+                }
+            },
+        });
+    }
+
+    /* ======================================================================
      * Popover Bento Grid UI
      * ====================================================================== */
 
@@ -1520,6 +1991,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this.menu.connect("open-state-changed", (menu, isOpen) => {
             if (!isOpen) {
                 this._cancelTabHoverTimer();
+            } else {
+                this._hideNotchPeek(true);
+                this._hideAnimatedTooltip();
             }
             this._syncSegmentHighlight();
             this._syncCapsuleOpenState();

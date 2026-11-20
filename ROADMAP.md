@@ -22,7 +22,15 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 3 — Waybar / Hyprland / Sway / GNOME Shell (`v1.2.0` — Planejada)
+## Fase 3 — Apple Notch & Notchy Peek Intermediário (`v1.2.0` — Concluída)
+- [x] **Estética Apple Notch na TopBar (`applet/stylesheet.css`)**: Recorte de ilha colada no topo da tela (`border-radius: 0 0 14px 14px;`), acabamento LiquidGlass translúcido e borda inferior luminosa nos estados ativos e hover.
+- [x] **Estágio Intermediário Notchy Peek (`FEAT-006`)**: Container flutuante de 480px montado em `Main.uiGroup`, proporcionando acesso instantâneo ao mini-player Spotify/Mídia e cota Antigravity após 220ms de hover, com controles de transporte rápidos e botão `Expandir`.
+- [x] **Tooltips Animados LiquidGlass (`UX-017`)**: Tooltips flutuantes suaves em escala e translação multieixo com algoritmo anti-colisão automático com o Notchy Peek.
+- [x] **Popover Bento Grid 700px Unificado (`UX-016`)**: Largura padronizada de 700px em todas as 4 abas e transições aceleradas na GPU a 60 FPS reais sem flash em branco.
+
+---
+
+## Fase 4 — Waybar / Hyprland / Sway / GNOME Shell (`v1.3.0` — Planejada)
 - [ ] **Integração Waybar Nauta**: Módulo customizado oficial usando `dpi-hub --waybar`, com presets de CSS Glassmorphism prontos para Hyprland e Sway.
 - [ ] **Popover Wayland Nativo (GTK4 / Layer-Shell)**: Camada opcional leve para compositors Wayland que não utilizam o painel do Cinnamon, consumindo o mesmo JSON de `--island-json`.
 - [ ] **Extensão GNOME Shell**: Porta do módulo da TopBar para GNOME 45+ (ESM) mantendo paridade visual com o Design System `MASTER.md`.
@@ -30,7 +38,7 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 4 — KDE Plasma 6 & Novos Periféricos Wireless (`v1.3.0` — Planejada)
+## Fase 5 — KDE Plasma 6 & Novos Periféricos Wireless (`v1.4.0` — Planejada)
 - [ ] **Widget Plasmoid (KDE Plasma 6 / QML)**: Cápsula nativa para o painel do Plasma 6 reutilizando o backend `dpi-hub`.
 - [ ] **Expansão de Drivers HID & Compatibilidade Open-Source**:
   - Adoção contínua das especificações de engenharia reversa documentadas no projeto open-source `krisgfx9/Wireless-Device-Battery-Monitor` (já inauguradas na v1.0.6 com o protocolo `0xFF7A` da GameSir):
@@ -43,7 +51,7 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 5 — Automação de Perfis por Jogo / IDE (`v2.0.0` — Visão Futura)
+## Fase 6 — Automação de Perfis por Jogo / IDE (`v2.0.0` — Visão Futura)
 - [ ] **Watcher de Janela Ativa (X11/Wayland)**: Detecção de aplicação em foco para troca automática de perfis.
 - [ ] **Perfis Contextuais**:
   - *Modo IDE / Antigravity*: Mouse em DPI de precisão, Polling Rate 500Hz para economia de bateria, EQ `Voice`/`Flat`, destaque para cotas e Swarm na cápsula.

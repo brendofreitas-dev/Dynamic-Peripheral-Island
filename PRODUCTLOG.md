@@ -391,6 +391,29 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes unitários atualizados para `700px`, `280ms`, `EASE_OUT_CUBIC` e `opacity: 150`.
 - **Validação**: 44/44 testes aprovados, recarregamento no Cinnamon via D-Bus em 819ms com zero `JS ERROR` e zero `St-WARNING`.
 
+### `FEAT-006` — Estágio Intermediário Notchy Peek Inspirado no notchy.dev (`2026-11-20`)
+- **Severidade**: Nova Feature Principal (microinteração progressiva em 3 estágios).
+- **Causa & Racional Técnico**:
+  - Abrir o Popover Bento Grid completo (700px) apenas para pausar uma música no Spotify ou verificar a cota Antigravity é excessivo para tarefas rápidas.
+  - Inspirando-se no conceito moderno de ilha/notch do `notchy.dev`, implementou-se o **Notchy Peek** (`this._peekActor`) como um estágio intermediário de 480px montado em `Main.uiGroup`, proporcionando acesso imediato aos controles mais frequentes antes da expansão completa.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: métodos `_initNotchPeek()`, `_showNotchPeek()`, `_hideNotchPeek()`, `_buildPeekMediaSegment()` e `_buildPeekAntigravitySegment()`; descida animada suave em 260ms com `EASE_OUT_CUBIC` após 220ms de hover contínuo no Notch, grace timer de 240ms e recolhimento em 200ms; botão de expansão total para o Popover completo; ciclo de vida com remoção explícita de `Main.uiGroup` em `on_applet_removed_from_panel()`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: classes `.dpi-notch-peek` com `border-radius: 0 0 18px 18px;`, fundo escuro LiquidGlass (`rgba(16, 18, 28, 0.92)`) e sombra profunda.
+  - `tests/test_cli_and_applet.py`: testes unitários validando a criação, métodos de controle e descarte de `_peekActor`.
+- **Validação**: Testes automatizados aprovados e comportamento de hover/peek fluido verificado no Cinnamon.
+
+### `UX-017` — Estética Apple Notch na TopBar e Tooltips Animados LiquidGlass (`2026-11-20`)
+- **Severidade**: Refinamento Visual e Acessibilidade.
+- **Causa Raiz & Solução**:
+  - A cápsula anterior utilizava cantos arredondados simétricos em todos os lados (`6px` ou pílula inteira), distanciando-se visualmente do conceito de ilha ancorada no topo do monitor.
+  - A cápsula da TopBar foi redesenhada no formato característico do **Apple Notch**: topo plano colado na borda superior (`0 0`) e cantos arredondados na base inferior (`14px 14px`).
+  - Substituição dos tooltips estáticos por tooltips animados LiquidGlass flutuantes (`this._tooltipActor`, `.dpi-glass-tooltip`) com animação fluida multieixo (180ms de fade/scale/slide) e algoritmo anti-colisão inteligente que evita qualquer sobreposição com o Notchy Peek.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: regras de recorte `.dpi-unified-capsule` e `.dpi-standalone-capsule` (`border-radius: 0 0 14px 14px; margin-top: 0;`), e estilos de `.dpi-glass-tooltip`.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: `_initGlassTooltip()`, `_showAnimatedTooltip()`, `_hideAnimatedTooltip()` e posicionamento anti-colisão (`peekBottom + 6px`).
+  - `tests/test_cli_and_applet.py`: asserções de validação CSS e métodos de tooltip.
+- **Validação**: 44/44 testes aprovados, applet recarregado em 324ms sem alertas no `~/.xsession-errors`.
+
 ---
 
 ## 5. Procedimentos de Rollback

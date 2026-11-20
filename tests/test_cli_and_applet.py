@@ -418,10 +418,14 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn('text: "Dynamic Island"', src)
         self.assertIn("Agente Ativo:", src)
 
-        # UX-010: Antigravity VU 2-column wide layout without scrollbar
+        # UX-010 & BUG-007: Antigravity VU 2-column wide layout (720px) without scrollbar and relayout queue
         self.assertIn("_syncPopoverWidth()", src)
         self.assertIn("dpi-popover-wide", src)
         self.assertIn("this._scrollView.vscrollbar_policy = St.PolicyType.NEVER", src)
+        self.assertIn("this._popoverRoot.queue_relayout()", src)
+        self.assertIn("this._scheduleMenuReposition()", src)
+        self.assertIn("style_class: \"dpi-ag-col-left\"", src)
+        self.assertIn("style_class: \"dpi-ag-col-right\"", src)
 
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
@@ -459,8 +463,25 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-capsule-hovered",
             ".dpi-capsule-open",
             ".dpi-popover-wide",
+            ".dpi-ag-columns",
+            ".dpi-ag-col-left",
+            ".dpi-ag-col-right",
         ):
             self.assertIn(required_cls, css)
+
+        # BUG-007: Popover wide width 720px and contained columns 342px
+        popover_wide = re.search(r"\.dpi-popover-root\.dpi-popover-wide\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(popover_wide)
+        self.assertIn("width: 720px;", popover_wide.group(1))
+        self.assertIn("max-width: 720px;", popover_wide.group(1))
+
+        col_left = re.search(r"\.dpi-ag-col-left\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(col_left)
+        self.assertIn("width: 342px;", col_left.group(1))
+
+        col_right = re.search(r"\.dpi-ag-col-right\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(col_right)
+        self.assertIn("width: 342px;", col_right.group(1))
 
         # Zero font-family overrides (inherits system font, e.g. Lexend 10)
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)

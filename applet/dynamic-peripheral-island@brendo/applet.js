@@ -155,6 +155,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._calMenuSignalId = 0;
         this._calHoverTimerId = 0;
         this._tabHoverTimerId = 0;
+        this._repositionIdleId = 0;
         this._pillTooltips = [];
         this._taggedClockActors = [];
         this._hoverSignals = [];
@@ -769,6 +770,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (this._hoverLeaveTimerId) {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
+        }
+        if (this._repositionIdleId) {
+            GLib.source_remove(this._repositionIdleId);
+            this._repositionIdleId = 0;
         }
         this._cancelTabHoverTimer();
         this._disconnectCalMenu();
@@ -1490,6 +1495,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         // Header bar
         this._headerBox = new St.BoxLayout({
             style_class: "dpi-header-row",
+            style: "spacing: 6px;",
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -1549,6 +1555,44 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._scrollView.vscrollbar_policy = St.PolicyType.AUTOMATIC;
             }
         }
+        this._popoverRoot.queue_relayout();
+        if (this.menu && this.menu.box) {
+            this.menu.box.queue_relayout();
+        }
+    }
+
+    _scheduleMenuReposition() {
+        if (this._repositionIdleId) {
+            GLib.source_remove(this._repositionIdleId);
+            this._repositionIdleId = 0;
+        }
+        if (this._popoverRoot) {
+            this._popoverRoot.queue_relayout();
+        }
+        if (this.menu && this.menu.box) {
+            this.menu.box.queue_relayout();
+        }
+        this._repositionIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._repositionIdleId = 0;
+            if (this._destroyed || !this.menu || !this.menu.isOpen) {
+                return GLib.SOURCE_REMOVE;
+            }
+            if (typeof this.menu._reposition === "function") {
+                try {
+                    this.menu._reposition();
+                } catch (e) {
+                    // ignore
+                }
+            } else if (typeof this.menu._calculatePosition === "function") {
+                try {
+                    let [xPos, yPos] = this.menu._calculatePosition();
+                    this.menu.actor.set_position(xPos, yPos);
+                } catch (e) {
+                    // ignore
+                }
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _renderActiveTabBody() {
@@ -1576,21 +1620,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._syncSegmentHighlight();
         this._renderTabBar();
         this._renderActiveTabBody();
-
-        if (typeof this.menu._reposition === "function") {
-            try {
-                this.menu._reposition();
-            } catch (e) {
-                // ignore
-            }
-        } else if (typeof this.menu._calculatePosition === "function") {
-            try {
-                let [xPos, yPos] = this.menu._calculatePosition();
-                this.menu.actor.set_position(xPos, yPos);
-            } catch (e) {
-                // ignore
-            }
-        }
+        this._scheduleMenuReposition();
 
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
@@ -1626,7 +1656,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let creditsStr = this._extractPlanCredits(ag.plan);
 
         let leftCol = new St.BoxLayout({ vertical: true, x_expand: true });
-        let titleRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
+        let titleRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER, x_expand: true });
         titleRow.add_child(new St.Icon({
             icon_name: "view-grid-symbolic",
             icon_type: St.IconType.SYMBOLIC,
@@ -1642,17 +1672,23 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             style_class: "dpi-subtitle",
             y_align: Clutter.ActorAlign.CENTER,
         }));
-        titleRow.add_child(new St.Label({
+        let isWide = this._activeTab === "antigravity";
+        let titleLabel = new St.Label({
             text: "Antigravity View Usage",
             style_class: "dpi-title",
             y_align: Clutter.ActorAlign.CENTER,
-        }));
+        });
+        if (!isWide) {
+            titleLabel.text = "Antigravity VU";
+        }
+        titleRow.add_child(titleLabel);
         if (planName) {
             titleRow.add_child(this._makeBadge(planName, "purple"));
         }
         if (creditsStr) {
             titleRow.add_child(this._makeBadge(creditsStr, "info"));
         }
+        titleRow.add_child(new St.Widget({ x_expand: true }));
         leftCol.add_child(titleRow);
 
         let subtitleText = activeModel ? "Agente Ativo: " + activeModel : "Daemon Antigravity";
@@ -2211,10 +2247,19 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let pinnedQuota = settings.pinned_quota || "auto";
 
         // 2-Column Bento Grid: Left Column (Quotas) | Right Column (Session & Swarm, Histogram & Monthly)
-        let grid = new St.BoxLayout({ style: "spacing: 10px;", x_expand: true });
+        let grid = new St.BoxLayout({
+            style_class: "dpi-ag-columns",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
 
         // Left Column: Quota cards
-        let leftCol = new St.BoxLayout({ vertical: true, style: "spacing: 8px;", x_expand: true });
+        let leftCol = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-ag-col-left",
+            style: "spacing: 8px; width: 342px;",
+            x_expand: false,
+        });
         let quotas = Array.isArray(ag.quotas) ? ag.quotas : [];
         if (quotas.length === 0) {
             let emptyCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
@@ -2233,7 +2278,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         grid.add_child(leftCol);
 
         // Right Column: Session & Swarm + 7-Day Histogram & Monthly Summary
-        let rightCol = new St.BoxLayout({ vertical: true, style: "spacing: 8px;", x_expand: true });
+        let rightCol = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-ag-col-right",
+            style: "spacing: 8px; width: 342px;",
+            x_expand: false,
+        });
         rightCol.add_child(this._buildSwarmSessionCard(ag));
         rightCol.add_child(this._buildHistogramMonthlyCard(ag));
         grid.add_child(rightCol);

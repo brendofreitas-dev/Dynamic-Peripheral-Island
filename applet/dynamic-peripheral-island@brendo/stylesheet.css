@@ -329,7 +329,20 @@
 }
 
 .dpi-popover-root.dpi-popover-wide {
-    width: 680px;
+    width: 720px;
+    max-width: 720px;
+}
+
+.dpi-ag-columns {
+    spacing: 10px;
+}
+
+.dpi-ag-col-left {
+    width: 342px;
+}
+
+.dpi-ag-col-right {
+    width: 342px;
 }
 
 .dpi-popover-root.dpi-theme-dark {
@@ -1023,18 +1036,18 @@
 
 /* 7-Day Histogram */
 .dpi-hist-box {
-    spacing: 6px;
-    padding: 6px 4px 2px 4px;
+    spacing: 4px;
+    padding: 6px 2px 2px 2px;
 }
 
 .dpi-hist-col {
     spacing: 4px;
-    width: 48px;
+    width: 36px;
 }
 
 .dpi-hist-track {
     height: 62px;
-    width: 18px;
+    width: 14px;
     border-radius: 4px;
 }
 
@@ -1047,7 +1060,7 @@
 }
 
 .dpi-hist-bar {
-    width: 18px;
+    width: 14px;
     border-radius: 4px;
     background-color: rgba(189, 147, 249, 0.65);
 }

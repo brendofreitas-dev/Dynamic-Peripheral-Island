@@ -256,6 +256,16 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `applet/dynamic-peripheral-island@brendo/applet.js` e `stylesheet.css`: reorganização da aba em Bento Grid de duas colunas paralelas (`_colLeft` com Cotas de Modelos e Pace Marker; `_colRight` com Sessão Ativa, Tokens, Swarm Tracker e Histograma de 7 dias + Resumo Mensal); aplicação dinâmica da classe `.dpi-popover-wide` (680px) com política `vscrollbar_policy = NEVER` na aba Antigravity, restaurando a largura compacta (452px) e scroll automático nas demais abas.
 - **Validação**: Testes automatizados e inspeção no Cinnamon confirmando visualização simultânea de todas as métricas sem barra de rolagem.
 
+### `BUG-007` — Overflow da 2ª Coluna e Botão Refresh no Popover Wide de 2 Colunas (`2026-11-20`)
+- **Severidade**: Média (quebra de enquadramento visual na aba Antigravity VU).
+- **Causa Raiz**:
+  - A largura definida na v1.0.7 para o container wide (680px) era insuficiente para acomodar a soma das larguras das duas colunas de cards somada ao espaçamento, padding interno e moldura `.popup-menu`. Como resultado, os cards da coluna direita (`Sessão Ativa & Swarm` e `Histograma 7 Dias & Resumo Mensal`) e o botão `[refresh]` no topo vazavam para fora da borda do Popover.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: expansão de `.dpi-popover-wide` para `width: 720px; max-width: 720px;`; definição estrita de `width: 342px;` em `.dpi-ag-col-left` e `.dpi-ag-col-right` com espaçamento de 10px (`342 + 10 + 342 = 694px < 716px` de área útil); ajuste das barras do histograma para 14px com colunas de 36px e espaçamento de 4px para contenção perfeita.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: adição de `St.Widget({ x_expand: true })` entre os badges e o botão `[refresh]` no cabeçalho; título dinâmico responsivo (`Dynamic Island · Antigravity View Usage` em wide / `Dynamic Island · Antigravity VU` em compact); implementação de `_scheduleMenuReposition()` com chamadas a `queue_relayout()` e `GLib.idle_add` para recentralizar o menu no Cinnamon logo após a mudança de tamanho.
+  - `tests/test_cli_and_applet.py`: testes unitários adicionados para validar a classe de 720px, larguras das colunas de 342px, histograma contido e rotinas de relayout.
+- **Validação**: 34/34 testes aprovados e visualização 100% contida e alinhada sem vazamentos no Cinnamon Desktop.
+
 ---
 
 ## 5. Procedimentos de Rollback

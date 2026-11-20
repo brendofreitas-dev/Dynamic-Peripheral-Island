@@ -5,6 +5,15 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.8] - 2026-11-20
+
+### Corrigido
+- **BUG-007 (Enquadramento da 2ª Coluna e Botão Refresh no Popover Wide)**:
+  - `stylesheet.css`: expandida a classe `.dpi-popover-wide` para `width: 720px; max-width: 720px;`, com larguras exatas de 342px nas colunas esquerda (`.dpi-ag-col-left`) e direita (`.dpi-ag-col-right`) separadas por espaçamento de 10px (`342 + 10 + 342 = 694px < 716px` de área útil interna), eliminando qualquer vazamento lateral de cards.
+  - Ajustada a escala do histograma de 7 dias com colunas de 36px e barras de 14px com espaçamento de 4px, contendo integralmente os gráficos dentro da segunda coluna.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: adicionado espaçador elástico `St.Widget({ x_expand: true })` no cabeçalho do Popover e título dinâmico responsivo (`Dynamic Island · Antigravity View Usage` em wide / `Dynamic Island · Antigravity VU` em compact), impedindo que o botão `[refresh]` exceda a margem direita.
+  - Implementado `_scheduleMenuReposition()` com `queue_relayout()` e `GLib.idle_add` para centralização suave e imediata da janela do Popover após a expansão de largura no Cinnamon Muffin.
+
 ## [1.0.7] - 2026-11-20
 
 ### Corrigido

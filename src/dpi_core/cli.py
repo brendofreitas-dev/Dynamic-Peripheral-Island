@@ -116,14 +116,16 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
 
     low_battery = isinstance(battery, (int, float)) and connected and battery <= threshold
     critical_battery = isinstance(battery, (int, float)) and connected and battery <= 10
-    if key == "headset":
+    if key == "mouse":
+        visible = pinned or (connected and active) or charging or low_battery
+    elif key == "headset":
         visible = pinned or low_battery or (
-            connected and (isinstance(battery, (int, float)) or conn_type == "Bluetooth")
+            connected and (active or isinstance(battery, (int, float)) or conn_type == "Bluetooth")
         )
     elif key == "gamepad":
         visible = pinned or active or charging or low_battery
-    else:
-        visible = pinned or low_battery
+    else:  # keyboard
+        visible = pinned
 
     if not connected:
         status_text = "Off"
@@ -145,14 +147,27 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         detail_text = f"{conn_type} · Vol {vol_str}"
     elif key == "gamepad":
         controllers = dev.get("controllers") or []
-        active_ctrls = [c for c in controllers if c.get("active") or c.get("connected")]
-        first = active_ctrls[0] if active_ctrls else {}
+        active_ctrls = [c for c in controllers if c.get("active")]
+        all_ctrls = [c for c in controllers if c.get("active") or c.get("connected")]
+        first = active_ctrls[0] if active_ctrls else (all_ctrls[0] if all_ctrls else {})
         bat = first.get("battery", battery)
         is_chg = bool(first.get("charging", charging))
         if isinstance(bat, (int, float)):
             status_text = f"{int(bat)}%+" if is_chg else f"{int(bat)}%"
+        elif active_ctrls or active:
+            if len(active_ctrls) > 1:
+                base = f"{len(active_ctrls)}x"
+            else:
+                first_name = str(first.get("name") or dev.get("name") or "").lower()
+                if "gamesir" in first_name:
+                    base = "GameSir"
+                elif "easysmx" in first_name:
+                    base = "EasySMX"
+                else:
+                    base = "Pad"
+            status_text = f"{base}+" if is_chg else base
         else:
-            status_text = "USB+" if is_chg else ("Ativo" if active else "Standby")
+            status_text = "USB+" if is_chg else "Standby"
         detail_text = str(first.get("name") or dev.get("name") or conn_type)
     else:  # keyboard
         leds = dev.get("leds") or {}

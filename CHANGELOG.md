@@ -5,6 +5,23 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.5] - 2026-11-19
+
+### Corrigido
+- **BUG-004 (Detecção do GameSir Nova Lite em 2.4GHz XInput `3537:1040`)**:
+  - `GamepadDriver` (`src/dpi_core/hardware.py`): ampliado o suporte para múltiplos PIDs ativos da VID `3537` (`GAMESIR_ACTIVE_PIDS = frozenset({"1040", "1041"})`), reconhecendo a mudança física de PID do dongle de `2106` (standby) para `1040` no modo XInput 2.4GHz.
+  - Priorização estrita do nó primário de controle (com handler `js*` e `ff_supported == True`), descartando a interface auxiliar `Keyboard` (`event14`).
+  - Ativação imediata no pareamento (`active = True`), sem exigir clique prévio na janela de 60s, e descrição exata da conexão (`2.4GHz (XInput)`).
+
+### Adicionado
+- **UX-005 (Auto-exibição de Dispositivos Ativos na TopBar)**:
+  - `src/dpi_core/cli.py`: periféricos sem fio ativos (`active == True`) ou carregando (`charging == True`) são automaticamente exibidos na cápsula da TopBar (`visible = True`) assim que são ligados.
+  - Para gamepads sem leitura percentual de bateria no protocolo XInput, implementado rótulo contextual dinâmico (`GameSir`, `EasySMX` ou `Nx`) com indicador de carga (`+`).
+- **UX-006 (Troca Fluida por Hover com Menus Abertos)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: quando o Popover da ilha estiver aberto, passar o cursor por cima dos outros elementos centrais da TopBar alterna instantaneamente a visualização (Periféricos ↔ Antigravity ou fecha a ilha e abre o menu nativo do `calendar@cinnamon.org`).
+  - Quando o menu do Calendário nativo estiver aberto, passar o mouse sobre Periféricos ou Antigravity fecha o calendário e abre suavemente a aba correspondente da ilha.
+  - Dentro do Popover, passar o mouse sobre as abas (`Periféricos` | `Antigravity VU` | `Ajustes`) realiza a troca automática debounced em 75ms.
+
 ## [1.0.4] - 2026-11-19
 
 ### Corrigido

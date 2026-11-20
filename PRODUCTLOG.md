@@ -33,10 +33,10 @@ A versão `v1.0.0` foi construída de forma paralela por um Swarm multi-agente c
 | `design-docs` | Gemini 4 Hydrogen (Medium) | Tokens UI/UX Pro Max (`MASTER.md`, `tokens.json`, `tokens.css`), governança e documentação técnica. |
 | `test-verifier` | Gemini 4 Hydrogen (High) | Suíte `unittest` (`tests/test_*.py`), auditoria cruzada, instalação runtime e commit inicial. |
 
-### 2.1. Evolução do Swarm na v1.0.2–v1.0.4 e Agente `docs-git`
+### 2.1. Evolução do Swarm na v1.0.2–v1.0.5 e Agente `docs-git`
 
-O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), com os workers do Swarm em **Gemini 3.8 Flash (High)** / **Orchestrator (Argon)**.
-Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/docs-git.md`) para centralizar a governança da documentação técnica contínua, auditoria de integridade e geração de commits semânticos no Git (Conventional Commits).
+O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), e todos os workers do Swarm operam em **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`) com a renovação da janela de cota de 5h.
+Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/docs-git.md`) para centralizar a governança da documentação técnica contínua, auditoria de integridade e geração de commits semânticos no Git (Conventional Commits).
 
 | Agente | Modelo Ativo | Papel Atualizado |
 | :--- | :--- | :--- |
@@ -157,6 +157,37 @@ Além disso, foi introduzido o agente dedicado **`docs-git`** (`.agents/agents/d
   - `applet/dynamic-peripheral-island@brendo/applet.js`: criação de `_switchTab(newTabId, animate = true)` animando `this._bodyStack.ease({ opacity: 255, translation_x: 0, duration: 180, mode: Clutter.AnimationMode.EASE_OUT_CUBIC })` a partir de `translation_x = dir * 14`; criação de `_animateCardBody(body, cardKey)` animando a expansão de cards (`translation_y: -6 -> 0`, `160ms`, `EASE_OUT_QUAD`); comparação de `payloadHash` em `_refreshNow()` para evitar re-renderização redundante com o menu aberto.
   - `tests/test_cli_and_applet.py`: asserções garantindo a presença de `_switchTab`, `_animateCardBody`, `translation_x` e `EASE_OUT_CUBIC`.
 - **Validação**: 30/30 testes aprovados e transições verificadas em runtime no Cinnamon.
+
+### `BUG-004` — Omissão do GameSir Nova Lite em Modo XInput 2.4GHz (`3537:1040`) (`2026-11-19`)
+- **Severidade**: Alta (o controle desaparecia completamente da detecção ao ser ligado em modo XInput via dongle sem fio).
+- **Causa Raiz**:
+  - Quando o GameSir Nova Lite é ligado no modo XInput 2.4GHz, a MCU do dongle altera dinamicamente seu PID USB de `3537:2106` (standby) para `3537:1040` (`2.4G XBOX 360 For Windows`), expondo o gamepad real em `event11 js0` e uma interface auxiliar de teclado (`2.4G XBOX 360 For Windows Keyboard`) em `event14`.
+  - O `GamepadDriver` anterior possuía `GAMESIR_ACTIVE_PID = "1041"` fixo (modo HID/Android), descartando silenciosamente o nó `3537:1040`. Além disso, a varredura selecionava por vezes a interface secundária `Keyboard` em vez do gamepad com Force Feedback.
+- **Arquivos Modificados**:
+  - `src/dpi_core/hardware.py`: substituição por conjuntos `GAMESIR_STANDBY_PIDS = frozenset({"2106"})` e `GAMESIR_ACTIVE_PIDS = frozenset({"1040", "1041"})`, aceitando qualquer PID ativo não-standby; ordenação estrita em `gs_active_inputs` priorizando nós com handler `js*`, `ff_supported == True` e sem substring `keyboard`; atribuição imediata de `is_active = True` (o dongle só assume o PID ativo quando o controle está ligado); e formatação descritiva em `connection_type` (`"2.4GHz (XInput)"`).
+  - `tests/test_hardware.py`: novo teste unitário `test_gamesir_nova_lite_xinput_mode_and_standby` cobrindo o nó composto `1040` + `Keyboard` e atualização de `test_60s_inactivity_hides_gamepad_after_timeout` para isolar o controle EasySMX.
+- **Validação**: 31/31 testes aprovados e detecção imediata do controle no hardware real como `2.4GHz (XInput)`.
+
+### `UX-005` — Auto-exibição de Periféricos Ativos na TopBar (`2026-11-19`)
+- **Severidade**: Média (melhoria ergonômica de visibilidade solicitada pelo usuário).
+- **Causa Raiz**:
+  - Periféricos sem fio não fixados (`pinned == False`) permaneciam ocultos na cápsula da TopBar até que o usuário os fixasse manualmente em Ajustes, mesmo quando o dispositivo estava ativamente em uso.
+- **Arquivos Modificados**:
+  - `src/dpi_core/cli.py`: em `_summarize_device`, a condição de visibilidade foi expandida para incluir qualquer periférico sem fio ativo (`active == True`) ou em carregamento (`charging == True`) nos cards de mouse, headset e gamepad; em gamepads sem telemetria percentual de bateria no protocolo XInput, implementado rótulo contextual (`"GameSir"`, `"EasySMX"` ou `"Pad"` com sufixo `"+"` se carregando).
+  - `tests/test_cli_and_applet.py`: asserções automatizadas validando a presença automática de periféricos ativos na saída da TopBar.
+- **Validação**: Saídas `--island-json`, `--waybar` e `--pretty` exibindo o GameSir ativo na TopBar sem necessidade de fixação prévia.
+
+### `UX-006` — Troca Fluida por Hover com Menus Abertos (`2026-11-19`)
+- **Severidade**: Média (fluxo de navegação unificado entre a Ilha Dinâmica e o Calendário do Cinnamon).
+- **Causa Raiz**:
+  - Ao abrir o Popover ou o Calendário, o usuário precisava clicar explicitamente nos outros segmentos da barra central para alternar entre as visões, exigindo múltiplos cliques repetitivos.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    1. Quando o Popover da ilha está aberto (`this.menu.isOpen`), `menuEventFilter(event)` captura `Clutter.EventType.ENTER`: se o cursor mover para o outro segmento da ilha, invoca `_switchTabFromTopBarHover` reposicionando o `sourceActor` e animando a troca de abas; se entrar no `calendarActor`, fecha a ilha e abre o menu nativo do Calendário.
+    2. Quando o menu do Calendário estiver aberto, um listener temporário monitora a entrada do mouse nos segmentos da ilha para fechar o calendário e abrir o Popover diretamente na aba correspondente, desconectando-se imediatamente ao fechar o menu.
+    3. Dentro do Popover, adicionado listener com debounce de 75ms (`_tabHoverTimerId`) nas abas da barra superior para troca suave entre Periféricos, Antigravity e Ajustes ao passar o cursor.
+  - `tests/test_cli_and_applet.py`: testes unitários verificando a lógica de `menuEventFilter`, `calMenu.connect("open-state-changed")` e timers de hover.
+- **Validação**: Suíte completa de 31 testes aprovada e navegação contínua por hover validada no Cinnamon Desktop sem vazamento de memória ou eventos órfãos.
 
 ---
 

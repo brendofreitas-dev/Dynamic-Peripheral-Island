@@ -1393,6 +1393,8 @@ class GamepadDriver:
     GAMESIR_VID = "3537"
     GAMESIR_ACTIVE_PID = "1041"
     GAMESIR_STANDBY_PID = "2106"
+    GAMESIR_STANDBY_PIDS = frozenset({"2106"})
+    GAMESIR_ACTIVE_PIDS = frozenset({"1040", "1041"})
 
     EASYSMX_VID = "045e"
     EASYSMX_PID = "028e"
@@ -1575,29 +1577,48 @@ class GamepadDriver:
 
         controllers: List[Dict[str, Any]] = []
 
-        # --- 1. GameSir Nova Lite (3537:1041 active / 3537:2106 dongle standby) ---
+        # --- 1. GameSir Nova Lite (3537:1040/1041 active / 3537:2106 dongle standby) ---
         gs_active_inputs = [
-            d for d in input_devs if d["vid"] == self.GAMESIR_VID and d["pid"] == self.GAMESIR_ACTIVE_PID
+            d for d in input_devs
+            if d["vid"] == self.GAMESIR_VID and d["pid"] not in self.GAMESIR_STANDBY_PIDS
         ]
         gs_active_hid = [
-            n for n in hidraw_nodes if n["vid"] == self.GAMESIR_VID and n["pid"] == self.GAMESIR_ACTIVE_PID
+            n for n in hidraw_nodes
+            if n["vid"] == self.GAMESIR_VID and n["pid"] not in self.GAMESIR_STANDBY_PIDS
         ]
         gs_standby_hid = [
-            n for n in hidraw_nodes if n["vid"] == self.GAMESIR_VID and n["pid"] == self.GAMESIR_STANDBY_PID
+            n for n in hidraw_nodes
+            if n["vid"] == self.GAMESIR_VID and n["pid"] in self.GAMESIR_STANDBY_PIDS
         ]
 
         if gs_active_inputs or gs_active_hid:
-            primary = gs_active_inputs[0] if gs_active_inputs else None
+            # Prioritize real gamepad node: has js* handler, has ff_supported, not a keyboard auxiliary interface
+            def _gs_score(dev: Dict[str, Any]) -> Tuple[int, int, int]:
+                name_low = dev.get("name", "").lower()
+                is_not_kbd = 1 if "keyboard" not in name_low else 0
+                has_js = 1 if any(h.startswith("js") for h in dev.get("handlers", [])) else 0
+                has_ff = 1 if dev.get("ff_supported") else 0
+                return (is_not_kbd, has_js, has_ff)
+
+            gs_sorted_inputs = sorted(gs_active_inputs, key=_gs_score, reverse=True)
+            primary = gs_sorted_inputs[0] if gs_sorted_inputs else None
             ev_name = primary["event_name"] if primary else None
             ev_path = primary["event_path"] if primary else None
-            fresh = self._poll_event_activity(ev_name, ev_path, now) if ev_name else True
-            # 3537:1041 enumerates when controller is on; if an explicit stale marker exists, respect 60s hide rule
-            if ev_name and not fresh:
-                marker = self._activity_file(ev_name)
-                is_active = not marker.exists()
-            else:
-                is_active = fresh
+            if ev_name:
+                self._poll_event_activity(ev_name, ev_path, now)
+            is_active = True
+
             bat, chg = self._find_gamepad_battery(("3537", "gamesir", "nova"))
+            active_pid = primary["pid"] if primary else (gs_active_hid[0]["pid"] if gs_active_hid else "")
+            if chg:
+                conn_type = "USB-C (Carregando)"
+            elif active_pid == "1040":
+                conn_type = "2.4GHz (XInput)"
+            elif active_pid == "1041":
+                conn_type = "2.4GHz (HID)"
+            else:
+                conn_type = "2.4GHz"
+
             layout, dz = self._get_controller_prefs("gamesir_nova_lite")
             controllers.append(
                 {
@@ -1608,7 +1629,7 @@ class GamepadDriver:
                     "active": is_active,
                     "charging": chg,
                     "battery": bat,
-                    "connection_type": "USB-C (Carregando)" if chg else "2.4GHz",
+                    "connection_type": conn_type,
                     "layout": layout,
                     "deadzone_pct": dz,
                     "ff_supported": bool(primary["ff_supported"]) if primary else False,

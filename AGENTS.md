@@ -49,7 +49,7 @@ Regras inegociáveis para qualquer alteração em `K500KeyboardDriver`:
 
 ## 4. Topologia do Swarm e Governança de Agentes
 
-O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), com os workers do Swarm em **Gemini 3.8 Flash (High)** / **Orchestrator (Argon)** conforme disponibilidade de cota, garantindo orquestração de alto nível, conformidade de contratos e governança determinística.
+O `coordinator` opera em **Orchestrator (Argon)** (`gemini-pro-orchestrator-g1-pro`), e todos os workers do Swarm operam em **Gemini 3.8 Flash (High)** (`gemini-3.8-flash-high`) com a renovação da janela de cota de 5h, garantindo orquestração de alto nível, latência mínima e governança determinística.
 
 | Agente | Modelo Ativo | Papel e Escopo de Atuação |
 | :--- | :--- | :--- |

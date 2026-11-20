@@ -148,6 +148,11 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._destroyed = false;
         this._unifiedCenterBox = null;
         this._leftSlot = null;
+        this._calendarActor = null;
+        this._calMenu = null;
+        this._calMenuSignalId = 0;
+        this._stageEnterSignalId = 0;
+        this._tabHoverTimerId = 0;
         this._taggedClockActors = [];
         this._hoverSignals = [];
         this._seenAlerts = {};
@@ -494,12 +499,27 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     break;
                 }
             }
+            this._calendarActor = calendarActor;
 
             if (this._leftSlot) {
                 if (calendarActor) {
                     centerBox.insert_child_below(this._leftSlot, calendarActor);
                 } else {
                     this.actor.insert_child_at_index(this._leftSlot, 0);
+                }
+            }
+
+            let calApplet = calendarActor && calendarActor._applet;
+            let calMenu = calApplet && calApplet.menu;
+            if (calMenu && calMenu !== this._calMenu) {
+                this._disconnectCalMenu();
+                this._calMenu = calMenu;
+                try {
+                    this._calMenuSignalId = calMenu.connect("open-state-changed", (menu, isOpen) => {
+                        this._onCalendarOpenStateChanged(isOpen);
+                    });
+                } catch (e) {
+                    global.logWarning(UUID + ": failed to connect to calendar menu: " + e);
                 }
             }
 
@@ -540,7 +560,79 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
     }
 
+    _onCalendarOpenStateChanged(isOpen) {
+        if (this._destroyed) return;
+        if (isOpen) {
+            this._connectStageEnterListener();
+        } else {
+            this._disconnectStageEnterListener();
+        }
+    }
+
+    _connectStageEnterListener() {
+        this._disconnectStageEnterListener();
+        if (!global.stage) return;
+        try {
+            this._stageEnterSignalId = global.stage.connect("enter-event", (actor, event) => {
+                if (this._destroyed) return Clutter.EVENT_PROPAGATE;
+                let calMenu = this._calMenu || (this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu);
+                if (!calMenu || !calMenu.isOpen) {
+                    this._disconnectStageEnterListener();
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                let src = event ? event.get_source() : null;
+                if (!src) return Clutter.EVENT_PROPAGATE;
+
+                let inLeft = (this._leftSlot && this._leftSlot.contains(src)) ||
+                             (this._segPeripherals && this._segPeripherals.contains(src));
+                let inRight = (this.actor && this.actor.contains(src)) ||
+                              (this._segAntigravity && this._segAntigravity.contains(src));
+
+                if (inLeft) {
+                    this._disconnectStageEnterListener();
+                    calMenu.close(false);
+                    this._openTabFromSegment("peripherals");
+                    return Clutter.EVENT_STOP;
+                } else if (inRight) {
+                    this._disconnectStageEnterListener();
+                    calMenu.close(false);
+                    this._openTabFromSegment("antigravity");
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+        } catch (e) {
+            global.logWarning(UUID + ": failed to connect stage enter-event: " + e);
+        }
+    }
+
+    _disconnectStageEnterListener() {
+        if (this._stageEnterSignalId && global.stage) {
+            try {
+                global.stage.disconnect(this._stageEnterSignalId);
+            } catch (e) {
+                // ignore
+            }
+            this._stageEnterSignalId = 0;
+        }
+    }
+
+    _disconnectCalMenu() {
+        this._disconnectStageEnterListener();
+        if (this._calMenu && this._calMenuSignalId) {
+            try {
+                this._calMenu.disconnect(this._calMenuSignalId);
+            } catch (e) {
+                // ignore
+            }
+            this._calMenuSignalId = 0;
+        }
+        this._calMenu = null;
+    }
+
     _detachUnifiedCapsule() {
+        this._disconnectCalMenu();
+        this._calendarActor = null;
         if (this._hoverLeaveTimerId) {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
@@ -621,6 +713,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
         }
+        this._cancelTabHoverTimer();
+        this._disconnectCalMenu();
 
         for (let item of this._themeSignalIds) {
             try {
@@ -660,9 +754,33 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                      (this._segPeripherals && this._segPeripherals.contains(src));
         let inRight = (this.actor && this.actor.contains(src)) ||
                       (this._segAntigravity && this._segAntigravity.contains(src));
-        if (!inLeft && !inRight) return false;
+        let inCalendar = Boolean(this._calendarActor && this._calendarActor.contains(src));
+
+        if (!inLeft && !inRight && !inCalendar) return false;
 
         let etype = event.type();
+
+        if (this.menu && this.menu.isOpen) {
+            if (etype === Clutter.EventType.ENTER || etype === Clutter.EventType.MOTION) {
+                if (inLeft && this._activeTab !== "peripherals") {
+                    this._switchTabFromTopBarHover("peripherals");
+                    return true;
+                }
+                if (inRight && this._activeTab !== "antigravity") {
+                    this._switchTabFromTopBarHover("antigravity");
+                    return true;
+                }
+                if (inCalendar) {
+                    this.menu.close(false);
+                    let calMenu = this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu;
+                    if (calMenu && !calMenu.isOpen) {
+                        calMenu.open(true);
+                    }
+                    return true;
+                }
+            }
+        }
+
         if (etype === Clutter.EventType.BUTTON_RELEASE) {
             return true;
         }
@@ -675,8 +793,47 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._openTabFromSegment("antigravity");
                 return true;
             }
+            if (inCalendar) {
+                if (this.menu && this.menu.isOpen) {
+                    this.menu.close(false);
+                }
+                let calMenu = this._calendarActor && this._calendarActor._applet && this._calendarActor._applet.menu;
+                if (calMenu && !calMenu.isOpen) {
+                    calMenu.open(true);
+                }
+                return true;
+            }
         }
         return false;
+    }
+
+    _switchTabFromTopBarHover(tabName) {
+        if (!this.menu || !this.menu.isOpen) return;
+        this.menu.sourceActor = (tabName === "peripherals" && this._segPeripherals)
+            ? this._segPeripherals
+            : (this._segAntigravity || this.actor);
+        this._switchTab(tabName, true);
+        if (typeof this.menu._reposition === "function") {
+            try {
+                this.menu._reposition();
+            } catch (e) {
+                // ignore
+            }
+        } else if (typeof this.menu._calculatePosition === "function") {
+            try {
+                let [xPos, yPos] = this.menu._calculatePosition();
+                this.menu.actor.set_position(xPos, yPos);
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
+    _cancelTabHoverTimer() {
+        if (this._tabHoverTimerId) {
+            GLib.source_remove(this._tabHoverTimerId);
+            this._tabHoverTimerId = 0;
+        }
     }
 
     on_applet_clicked(event) {
@@ -1181,6 +1338,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this.menuManager.addMenu(this.menu);
 
         this.menu.connect("open-state-changed", (menu, isOpen) => {
+            if (!isOpen) {
+                this._cancelTabHoverTimer();
+            }
             this._syncSegmentHighlight();
             this._syncCapsuleOpenState();
             if (isOpen) {
@@ -1341,6 +1501,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     }
 
     _renderTabBar() {
+        this._cancelTabHoverTimer();
         this._tabBar.destroy_all_children();
         let tabs = [
             { id: "peripherals", label: "Perifericos", icon: "input-mouse-symbolic" },
@@ -1372,9 +1533,27 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 child: content,
             });
             btn.connect("clicked", () => {
+                this._cancelTabHoverTimer();
                 if (this._activeTab !== tab.id) {
                     this._switchTab(tab.id, true);
                 }
+            });
+            btn.connect("enter-event", () => {
+                this._cancelTabHoverTimer();
+                if (this._activeTab !== tab.id && this.menu && this.menu.isOpen) {
+                    this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 75, () => {
+                        this._tabHoverTimerId = 0;
+                        if (!this._destroyed && this.menu && this.menu.isOpen && this._activeTab !== tab.id) {
+                            this._switchTab(tab.id, true);
+                        }
+                        return GLib.SOURCE_REMOVE;
+                    });
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+            btn.connect("leave-event", () => {
+                this._cancelTabHoverTimer();
+                return Clutter.EVENT_PROPAGATE;
             });
             this._tabBar.add_child(btn);
         }

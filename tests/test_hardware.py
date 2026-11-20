@@ -635,8 +635,8 @@ class TestGamepadDriver(unittest.TestCase):
             root = Path(tmp)
             input_devices = root / "devices"
             input_devices.write_text(
-                'I: Bus=0003 Vendor=3537 Product=1041 Version=0110\n'
-                'N: Name="GameSir Nova Lite"\n'
+                'I: Bus=0003 Vendor=045e Product=028e Version=0110\n'
+                'N: Name="Microsoft X-Box 360 pad"\n'
                 'P: Phys=usb-0000:00:14.0-1/input0\n'
                 'H: Handlers=event14 js0\n'
                 'B: FF=1\n',
@@ -661,11 +661,74 @@ class TestGamepadDriver(unittest.TestCase):
             self.assertTrue(s_fresh["active"])
             self.assertEqual(s_fresh["active_count"], 1)
 
-            # At +65s -> hidden from active bar
+            # At +65s -> hidden from active bar (EasySMX dongle without fresh activity)
             s_stale = drv.read_state(now_ts=1065.0)
             self.assertTrue(s_stale["connected"])
             self.assertFalse(s_stale["active"])
             self.assertEqual(s_stale["active_count"], 0)
+
+    def test_gamesir_nova_lite_xinput_mode_and_standby(self) -> None:
+        """BUG-004: GameSir Nova Lite 3537:1040 (XInput) vs 3537:2106 (Standby)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_devices = root / "devices"
+            # 3537:1040 creates Generic X-Box pad (event11 js0) + Keyboard (event14)
+            input_devices.write_text(
+                'I: Bus=0003 Vendor=3537 Product=1040 Version=0110\n'
+                'N: Name="2.4G XBOX 360 For Windows Keyboard"\n'
+                'P: Phys=usb-0000:00:14.0-1/input1\n'
+                'H: Handlers=event14\n'
+                'B: FF=0\n\n'
+                'I: Bus=0003 Vendor=3537 Product=1040 Version=0110\n'
+                'N: Name="Generic X-Box pad"\n'
+                'P: Phys=usb-0000:00:14.0-1/input0\n'
+                'H: Handlers=event11 js0\n'
+                'B: FF=1\n',
+                encoding="utf-8",
+            )
+
+            drv = GamepadDriver(
+                state_dir=root / "state",
+                hidraw_root=root / "hidraw",
+                input_devices_path=input_devices,
+                power_supply_root=root / "power",
+                activity_dir=root / "tmp",
+                dev_input_root=root / "dev_input",
+            )
+
+            state = drv.read_state(now_ts=1000.0)
+            self.assertTrue(state["connected"])
+            self.assertTrue(state["active"])
+            self.assertEqual(state["connected_count"], 1)
+            self.assertEqual(state["active_count"], 1)
+
+            ctrl = state["controllers"][0]
+            self.assertEqual(ctrl["id"], "gamesir_nova_lite")
+            self.assertEqual(ctrl["name"], "GameSir Nova Lite")
+            self.assertTrue(ctrl["active"])
+            self.assertEqual(ctrl["connection_type"], "2.4GHz (XInput)")
+            self.assertTrue(ctrl["event_path"].endswith("event11"))
+            self.assertTrue(ctrl["ff_supported"])
+
+            # Standby mode: no active inputs, only hidraw dongle 3537:2106
+            input_devices.write_text("", encoding="utf-8")
+            hidraw_root = root / "hidraw"
+            _make_fake_hidraw_node(hidraw_root, "hidraw1", "3537", "2106", hid_name="2.4G Receiver")
+            drv_sb = GamepadDriver(
+                state_dir=root / "state",
+                hidraw_root=hidraw_root,
+                input_devices_path=input_devices,
+                power_supply_root=root / "power",
+                activity_dir=root / "tmp",
+                dev_input_root=root / "dev_input",
+            )
+            state_sb = drv_sb.read_state(now_ts=1000.0)
+            self.assertTrue(state_sb["connected"])
+            self.assertFalse(state_sb["active"])
+            self.assertEqual(state_sb["active_count"], 0)
+            ctrl_sb = state_sb["controllers"][0]
+            self.assertFalse(ctrl_sb["active"])
+            self.assertEqual(ctrl_sb["connection_type"], "Standby (Dongle 2.4GHz)")
 
     def test_test_rumble_enosys_error_and_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

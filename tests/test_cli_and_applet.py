@@ -392,6 +392,14 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_animateCardBody(body, cardKey)", src)
         self.assertIn("translation_y: 0", src)
 
+        # UX-006: Hover-switch between open menus/tabs without opening unprompted
+        self.assertIn("Clutter.EventType.ENTER", src)
+        self.assertIn("_switchTabFromTopBarHover", src)
+        self.assertIn('calMenu.connect("open-state-changed"', src)
+        self.assertIn("_onCalendarOpenStateChanged", src)
+        self.assertIn("_tabHoverTimerId", src)
+        self.assertIn("_cancelTabHoverTimer", src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -518,6 +526,72 @@ class TestAppletCssAndDocs(unittest.TestCase):
                     self.assertTrue(by_key["headset"]["visible"])
                     self.assertTrue(by_key["gamepad"]["visible"])
                     self.assertTrue(by_key["headset"]["status_text"].endswith("+"))
+
+            # UX-005: Auto-visibility and label for wireless GameSir Nova Lite / EasySMX
+            hw_gamepad = _mock_hw_manager()
+            # Active GameSir controller with battery=None (2.4GHz XInput mode)
+            hw_gamepad.get_all_peripherals_snapshot.return_value["devices"]["gamepad"] = {
+                "id": "gamepads",
+                "name": "GameSir Nova Lite",
+                "connected": True,
+                "active": True,
+                "charging": False,
+                "battery": None,
+                "connection_type": "2.4GHz (XInput)",
+                "controllers": [
+                    {
+                        "id": "gamesir_nova_lite",
+                        "name": "GameSir Nova Lite",
+                        "connected": True,
+                        "active": True,
+                        "charging": False,
+                        "battery": None,
+                    }
+                ],
+            }
+            # Mouse unpinned and in standby -> hidden
+            hw_gamepad.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["active"] = False
+            hw_gamepad.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["standby"] = True
+            hw_gamepad.get_all_peripherals_snapshot.return_value["devices"]["mouse"]["charging"] = False
+
+            buf_gp = io.StringIO()
+            with contextlib.redirect_stdout(buf_gp):
+                rc_gp = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_gamepad,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_gp, 0)
+            data_gp = json.loads(buf_gp.getvalue())
+            gp_periphs = {p["key"]: p for p in data_gp["capsule"]["peripherals"]}
+            self.assertTrue(gp_periphs["gamepad"]["visible"])
+            self.assertEqual(gp_periphs["gamepad"]["status_text"], "GameSir")
+
+            # Dual controllers active -> "2x"
+            hw_gamepad.get_all_peripherals_snapshot.return_value["devices"]["gamepad"]["controllers"].append(
+                {
+                    "id": "easysmx_9124",
+                    "name": "EasySMX 9124",
+                    "connected": True,
+                    "active": True,
+                    "charging": False,
+                    "battery": None,
+                }
+            )
+            buf_dual = io.StringIO()
+            with contextlib.redirect_stdout(buf_dual):
+                rc_dual = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_gamepad,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_dual, 0)
+            data_dual = json.loads(buf_dual.getvalue())
+            gp_dual = {p["key"]: p for p in data_dual["capsule"]["peripherals"]}
+            self.assertTrue(gp_dual["gamepad"]["visible"])
+            self.assertEqual(gp_dual["gamepad"]["status_text"], "2x")
 
     def test_install_and_uninstall_scripts_syntax(self) -> None:
         for script_name in ("install.sh", "uninstall.sh"):

@@ -18,7 +18,7 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
 +--------------------------------------------------┼------------------------------------------------+
                                                    ▼  (Clique ou Super + Alt + I)
                         ╭─────────────────────────────────────────────────────────────╮
-                        │ [ Periféricos ]  [ Antigravity VU ]  [ Ajustes ]   Pro • ↻  │
+                        │ [ Periféricos ]  [ Áudio ]  [ Antigravity VU ]  [ Ajustes ] │
                         ├─────────────────────────────────────────────────────────────┤
                         │  ┌───────────────────────────┐ ┌─────────────────────────┐  │
                         │  │ AJAZZ AJ179 V2     85%    │ │ Havit Fuxi H3      90%  │  │
@@ -49,6 +49,16 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
 | **Machenike K500-B94** | `258a:0049` (`sysfs` / `hidraw`) | **Hardware Safe Mode** ativo (`safe_mode=True`), LEDs (`CAPS`, `NUM`, `SCROLL`) | Somente leitura (proteção da MCU Sino Wealth) + guia de atalhos físicos (`FN+INS`, `FN+↑/↓`, `FN+←/→`, `FN+ESC`) |
 | **GameSir Nova Lite** | `3537:1041` (ativo) / `3537:2106` (standby) | Status ativo/standby, bateria (se disponível), `ff_supported`, layout, deadzone (oculto após 60s inativo) | Teste de vibração (`EVIOCSFF`), Deadzone (`0`–`25%`), Layout (`xbox`/`nintendo`) |
 | **EasySMX 9124** | `045e:028e` (`hidraw` + `evdev`) | Consolidação automática de cabo USB-C + dongle 2.4GHz em 1 card (`USB-C (Carregando) + Dongle 2.4GHz`) | Teste de vibração (com orientação XInput `M + Menu + View` se `ENOSYS`), Deadzone (`0`–`25%`), Layout |
+
+---
+
+## Mixer de Áudio & Player MPRIS2
+
+O módulo `AudioMixerManager` e `MediaPlayerManager` (`src/dpi_core/audio.py`) fornece controle unificado de áudio e mídia via **PipeWire/PulseAudio** (`pactl`) e **DBus MPRIS2** (`gdbus`), sem dependências externas:
+
+- **Master & Microfone**: controle de volume individual (`0-100%`), alternância de mudo e seleção dinâmica de sinks/sources padrão.
+- **Mixer por Aplicativo (Volum-style)**: lista de streams de reprodução ativos (Spotify, Brave, Discord, etc.) com ícones dos apps, sliders individuais de volume e botão de mute por stream.
+- **Player de Mídia Spotify / MPRIS2**: card com capa de álbum (`art_url`), título da faixa, artista, barra de progresso com tempo decorrido/total (`mm:ss / mm:ss`) e botões de transporte (`Play/Pause`, `Next`, `Prev`).
 
 ---
 
@@ -117,6 +127,17 @@ dpi-hub --pretty        # Dashboard colorido no terminal
 | **Gamepads** | `--test-rumble [--controller-id ID]` | `dpi-hub --test-rumble` |
 | | `--set-deadzone <PCT> [--controller-id ID]` | `dpi-hub --set-deadzone 5` |
 | | `--set-gamepad-layout <xbox\|nintendo>` | `dpi-hub --set-gamepad-layout xbox` |
+| **Áudio & Mixer** | `--set-master-volume <PCT>` | `dpi-hub --set-master-volume 75` |
+| | `--toggle-master-mute` | `dpi-hub --toggle-master-mute` |
+| | `--set-default-sink <NAME>` | `dpi-hub --set-default-sink alsa_output.pci...` |
+| | `--set-mic-volume <PCT>` | `dpi-hub --set-mic-volume 80` |
+| | `--toggle-mic-mute` | `dpi-hub --toggle-mic-mute` |
+| | `--set-default-source <NAME>` | `dpi-hub --set-default-source alsa_input.usb...` |
+| | `--set-app-volume <ID> <PCT>` | `dpi-hub --set-app-volume 42 60` |
+| | `--toggle-app-mute <ID>` | `dpi-hub --toggle-app-mute 42` |
+| **Mídia (Spotify/MPRIS2)** | `--media-play-pause [--media-player BUS]` | `dpi-hub --media-play-pause` |
+| | `--media-next [--media-player BUS]` | `dpi-hub --media-next` |
+| | `--media-prev [--media-player BUS]` | `dpi-hub --media-prev` |
 | **Preferências** | `--pin-device <DEV[:BOOL]>` | `dpi-hub --pin-device headset:true` |
 | | `--pin-quota <GROUP>` | `dpi-hub --pin-quota neon` |
 | | `--set-theme <auto\|dark\|light>` | `dpi-hub --set-theme auto` |

@@ -199,7 +199,7 @@ def _mock_ag_collector() -> mock.MagicMock:
 class TestCliAndOutputs(unittest.TestCase):
     """Tests bin/dpi-hub modes (--island-json, --waybar, --pretty) and settings/control flags."""
 
-    def _run_cli(self, argv, settings_path=None, hw=None, ag=None):
+    def _run_cli(self, argv, settings_path=None, hw=None, ag=None, audio=None, media=None):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = cli.main(
@@ -207,6 +207,8 @@ class TestCliAndOutputs(unittest.TestCase):
                 hw_manager=hw or _mock_hw_manager(),
                 ag_collector=ag or _mock_ag_collector(),
                 settings_path=settings_path,
+                audio_manager=audio,
+                media_manager=media,
             )
         return rc, buf.getvalue()
 
@@ -218,7 +220,18 @@ class TestCliAndOutputs(unittest.TestCase):
             rc, out = self._run_cli(["--island-json"], settings_path=settings_path)
             self.assertEqual(rc, 0)
             data = json.loads(out)
-            for key in ("version", "timestamp", "theme_suggestion", "capsule", "alerts", "peripherals", "antigravity", "settings"):
+            for key in (
+                "version",
+                "timestamp",
+                "theme_suggestion",
+                "capsule",
+                "alerts",
+                "peripherals",
+                "antigravity",
+                "settings",
+                "audio",
+                "media",
+            ):
                 self.assertIn(key, data)
             self.assertEqual(len(data["capsule"]["peripherals"]), 4)
             self.assertEqual(data["capsule"]["antigravity"]["label"], "Neon 81%")
@@ -289,6 +302,48 @@ class TestCliAndOutputs(unittest.TestCase):
                 self.assertEqual(rc_h, 0)
                 self.assertTrue(json.loads(out_h)["ok"])
                 self.assertEqual(hw.dispatch_action.call_args[0][0], expected_action)
+
+    def test_cli_audio_and_media_control_actions(self) -> None:
+        """FEAT-004 & FEAT-005: CLI flags for AudioMixerManager and MediaPlayerManager."""
+        audio_mock = mock.MagicMock()
+        audio_mock.set_master_volume.return_value = (True, "Volume master 85%")
+        audio_mock.toggle_master_mute.return_value = (True, "Mudo master alternado")
+        audio_mock.set_default_sink.return_value = (True, "Saída alterada")
+        audio_mock.set_mic_volume.return_value = (True, "Volume mic 65%")
+        audio_mock.toggle_mic_mute.return_value = (True, "Mudo mic alternado")
+        audio_mock.set_default_source.return_value = (True, "Mic padrão alterado")
+        audio_mock.set_app_volume.return_value = (True, "Volume app ajustado")
+        audio_mock.toggle_app_mute.return_value = (True, "Mudo app alternado")
+
+        media_mock = mock.MagicMock()
+        media_mock.play_pause.return_value = (True, "Play/Pause alternado")
+        media_mock.next_track.return_value = (True, "Próxima faixa")
+        media_mock.previous_track.return_value = (True, "Faixa anterior")
+
+        cases = [
+            (["--set-master-volume", "85"], lambda: audio_mock.set_master_volume.assert_called_with(85)),
+            (["--toggle-master-mute"], lambda: audio_mock.toggle_master_mute.assert_called_with()),
+            (["--set-default-sink", "alsa_output.sink"], lambda: audio_mock.set_default_sink.assert_called_with("alsa_output.sink")),
+            (["--set-mic-volume", "65"], lambda: audio_mock.set_mic_volume.assert_called_with(65)),
+            (["--toggle-mic-mute"], lambda: audio_mock.toggle_mic_mute.assert_called_with()),
+            (["--set-default-source", "alsa_input.source"], lambda: audio_mock.set_default_source.assert_called_with("alsa_input.source")),
+            (["--set-app-volume", "12", "70"], lambda: audio_mock.set_app_volume.assert_called_with(12, 70)),
+            (["--toggle-app-mute", "12"], lambda: audio_mock.toggle_app_mute.assert_called_with(12)),
+            (["--media-play-pause"], lambda: media_mock.play_pause.assert_called_with(bus_name=None)),
+            (["--media-next"], lambda: media_mock.next_track.assert_called_with(bus_name=None)),
+            (["--media-prev"], lambda: media_mock.previous_track.assert_called_with(bus_name=None)),
+            (
+                ["--media-play-pause", "--media-player", "org.mpris.MediaPlayer2.spotify"],
+                lambda: media_mock.play_pause.assert_called_with(bus_name="org.mpris.MediaPlayer2.spotify"),
+            ),
+        ]
+
+        for argv, assert_fn in cases:
+            rc, out = self._run_cli(argv, audio=audio_mock, media=media_mock)
+            self.assertEqual(rc, 0, msg=f"Failed for argv: {argv}")
+            res = json.loads(out)
+            self.assertTrue(res["ok"])
+            assert_fn()
 
     def test_bin_dpi_hub_executable_runs_cleanly(self) -> None:
         bin_path = ROOT_DIR / "bin" / "dpi-hub"
@@ -432,6 +487,17 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("style_class: \"dpi-ag-col-left\"", src)
         self.assertIn("style_class: \"dpi-ag-col-right\"", src)
 
+        # FEAT-004 & FEAT-005: Audio tab with Volum mixer and Spotify/MPRIS2 media player
+        self.assertIn('"audio"', src)
+        self.assertIn('"Áudio"', src)
+        self.assertIn("_renderAudioTab()", src)
+        self.assertIn("_buildMediaPlayerCard(", src)
+        self.assertIn("_buildAudioMixerCard(", src)
+        self.assertIn("_buildPerAppAudioCard(", src)
+
+        # UX-014: LiquidGlass fluid tab switching animation
+        self.assertIn("Clutter.AnimationMode.EASE_OUT_EXPO", src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -500,6 +566,16 @@ class TestAppletCssAndDocs(unittest.TestCase):
         morph_text = re.search(r"\.dpi-morph-text\s*\{([^}]+)\}", css)
         self.assertIsNotNone(morph_text)
         self.assertIn("font-size: 1em;", morph_text.group(1))
+
+        # UX-014 & FEAT-004/FEAT-005: LiquidGlass styling and Audio/Media components
+        for glass_token in (
+            "rgba(38, 40, 54, 0.82)",
+            "rgba(255, 255, 255, 0.14)",
+            ".dpi-tab-btn-active",
+            ".dpi-media-title",
+            ".dpi-media-controls",
+        ):
+            self.assertIn(glass_token, css)
 
         # Zero font-family overrides (inherits system font, e.g. Lexend 10)
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)

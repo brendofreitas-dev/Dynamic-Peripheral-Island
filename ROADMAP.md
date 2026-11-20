@@ -13,7 +13,16 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 2 — Waybar / Hyprland / Sway / GNOME Shell (`v1.1.0` — Planejada)
+## Fase 2 — Áudio & Mídia Unificados + LiquidGlass (`v1.1.0` — Concluída)
+- [x] **Mixer de Áudio PipeWire / PulseAudio (`src/dpi_core/audio.py`)**: `AudioMixerManager` em Python 3 stdlib via `pactl`, com volume master, microfone, alternância de mudo, seleção de sinks/sources padrão e mixer per-app (estilo Volum) com resolução de ícones de aplicações e controle independente por stream.
+- [x] **Player de Mídia Spotify & MPRIS2 (`src/dpi_core/audio.py`)**: `MediaPlayerManager` via `gdbus`, exibição de metadados completos (capa de álbum `art_url`, título, artista), barra de progresso com tempo decorrido/total e botões de transporte (`Play/Pause`, `Next`, `Prev`).
+- [x] **Popover com 4 Abas no Applet**: Integração fluida da aba `Áudio` entre `Periféricos` e `Antigravity VU`, com transições animadas via `Clutter.AnimationMode.EASE_OUT_EXPO`.
+- [x] **LiquidGlass Design System (`applet/stylesheet.css`)**: Glassmorphism premium translúcido (`rgba(38, 40, 54, 0.82)`), bordas luminosas em `rgba(255, 255, 255, 0.14)`, drop-shadows cinematográficas e consistência visual completa.
+- [x] **CLI de Áudio e Mídia (`bin/dpi-hub`)**: Suporte completo a `--set-master-volume`, `--toggle-master-mute`, `--set-default-sink`, `--set-mic-volume`, `--toggle-mic-mute`, `--set-default-source`, `--set-app-volume`, `--toggle-app-mute` e `--media-*`.
+
+---
+
+## Fase 3 — Waybar / Hyprland / Sway / GNOME Shell (`v1.2.0` — Planejada)
 - [ ] **Integração Waybar Nauta**: Módulo customizado oficial usando `dpi-hub --waybar`, com presets de CSS Glassmorphism prontos para Hyprland e Sway.
 - [ ] **Popover Wayland Nativo (GTK4 / Layer-Shell)**: Camada opcional leve para compositors Wayland que não utilizam o painel do Cinnamon, consumindo o mesmo JSON de `--island-json`.
 - [ ] **Extensão GNOME Shell**: Porta do módulo da TopBar para GNOME 45+ (ESM) mantendo paridade visual com o Design System `MASTER.md`.
@@ -21,7 +30,7 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 3 — KDE Plasma 6 & Novos Periféricos Wireless (`v1.2.0` — Planejada)
+## Fase 4 — KDE Plasma 6 & Novos Periféricos Wireless (`v1.3.0` — Planejada)
 - [ ] **Widget Plasmoid (KDE Plasma 6 / QML)**: Cápsula nativa para o painel do Plasma 6 reutilizando o backend `dpi-hub`.
 - [ ] **Expansão de Drivers HID & Compatibilidade Open-Source**:
   - Adoção contínua das especificações de engenharia reversa documentadas no projeto open-source `krisgfx9/Wireless-Device-Battery-Monitor` (já inauguradas na v1.0.6 com o protocolo `0xFF7A` da GameSir):
@@ -34,7 +43,7 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 4 — Automação de Perfis por Jogo / IDE (`v2.0.0` — Visão Futura)
+## Fase 5 — Automação de Perfis por Jogo / IDE (`v2.0.0` — Visão Futura)
 - [ ] **Watcher de Janela Ativa (X11/Wayland)**: Detecção de aplicação em foco para troca automática de perfis.
 - [ ] **Perfis Contextuais**:
   - *Modo IDE / Antigravity*: Mouse em DPI de precisão, Polling Rate 500Hz para economia de bateria, EQ `Voice`/`Flat`, destaque para cotas e Swarm na cápsula.

@@ -327,6 +327,40 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: teste validando o uso de `1em`.
 - **Validação**: Herança perfeita do dimensionamento da fonte em runtime no Cinnamon.
 
+### `FEAT-004` — Mixer de Áudio Completo com Controle por Aplicativo (Inspirado no Volum) (`2026-11-20`)
+- **Severidade**: Nova Feature Principal (ecossistema de áudio integrado na Ilha).
+- **Causa & Racional Técnico**:
+  - No desktop Linux, o usuário frequentemente precisa ajustar o volume de aplicativos individuais (Spotify, navegadores, jogos), alternar entre saídas de áudio (headset, caixas de som, monitor) e mutar o microfone sem precisar abrir o painel de configurações do sistema.
+  - Inspirando-se na experiência moderna do aplicativo `Volum` (`esdrasstm/Volum`), desenvolveu-se o `AudioMixerManager` em Python 3 stdlib puro via `pactl`, respeitando a política estrita de zero dependências externas de `AGENTS.md`.
+- **Arquivos Modificados**:
+  - `src/dpi_core/audio.py`: criação da classe `AudioMixerManager` com leitura de `pactl list sinks`, `pactl list sources` (filtrando `.monitor`) e `pactl list sink-inputs`; métodos de controle de volume Master, microfone, seleção de saída/entrada padrão e controle individual de volume e mudo por aplicativo com clampeamento seguro em 0..150%.
+  - `src/dpi_core/cli.py`: integração no payload `--island-json` e adição das flags CLI de controle de áudio (`--set-master-volume`, `--toggle-master-mute`, `--set-default-sink`, `--set-mic-volume`, `--toggle-mic-mute`, `--set-default-source`, `--set-app-volume`, `--toggle-app-mute`).
+  - `tests/test_audio.py`: testes unitários determinísticos cobrindo o parsing de pactl e despacho de comandos.
+- **Validação**: Testes automatizados aprovados e integração com o PipeWire real validada ao vivo no Linux Mint.
+
+### `FEAT-005` — Central de Controle de Mídia com Spotify e MPRIS2 Nativo (`2026-11-20`)
+- **Severidade**: Nova Feature Principal (integração multimídia na TopBar).
+- **Causa & Racional Técnico**:
+  - Permitir controle de reprodução musical e visualização de metadados em tempo real diretamente na Ilha Dinâmica, sem janelas flutuantes extras.
+  - Implementado o `MediaPlayerManager` utilizando comunicação D-Bus via utilitário `gdbus` (padrão em sistemas GLib/GNOME/Cinnamon), consumindo a interface MPRIS2 (`org.mpris.MediaPlayer2.Player`).
+- **Arquivos Modificados**:
+  - `src/dpi_core/audio.py`: criação da classe `MediaPlayerManager` e parser GVariant nativo stdlib (`parse_gvariant`), priorizando o Spotify e extraindo título, artista, álbum, duração, posição atual e porcentagem de progresso, com comandos de transporte (`play_pause`, `next_track`, `previous_track`).
+  - `src/dpi_core/cli.py`: inclusão do objeto `media` no JSON e novas flags CLI (`--media-play-pause`, `--media-next`, `--media-prev`, `--media-player`).
+  - `tests/test_audio.py`: testes unitários para o parser GVariant, listagem de players e despacho de transporte.
+- **Validação**: Spotify ativo detectado com precisão e controle de faixas verificado em runtime.
+
+### `UX-014` — Nova Aba Áudio no Popover Bento Grid, Estética LiquidGlass e Transições Fluidas (`2026-11-20`)
+- **Severidade**: Melhoria Visual e Arquitetura de Interface.
+- **Causa Raiz & Solução**:
+  - A adição de controles de som e mídia exigia uma aba dedicada com visual moderno e de alta fidelidade para não sobrecarregar a aba de Periféricos.
+  - O Popover foi expandido para 4 abas (`Periféricos` | `Áudio` | `Antigravity VU` | `Ajustes`), com largura de 480px nas abas regulares e 720px na aba ampla de Antigravity.
+  - Implementada a estética **LiquidGlass** com superfícies translúcidas em camadas (`rgba(38, 40, 54, 0.82)`), bordas especulares reflexivas (`rgba(255, 255, 255, 0.14)`), realce glow na aba ativa e transições espaciais fluidas combinando escala (`0.98 -> 1.0`), translação direcional e interpolação exponencial (`EASE_OUT_EXPO`) sem travamentos.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: métodos `_renderAudioTab()`, `_buildMediaPlayerCard()`, `_buildAudioMixerCard()` e `_buildPerAppAudioCard()`; transições aprimoradas em `_switchTab()`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: classes e tokens LiquidGlass, botões de transporte arredondados e estilos da aba de áudio (200 regras balanceadas, zero `font-family`).
+  - `tests/test_cli_and_applet.py`: testes unitários cobrindo a aba de áudio, métodos de renderização e tokens CSS.
+- **Validação**: 44/44 testes aprovados, reload instantâneo no Cinnamon em 317ms sem erros no `~/.xsession-errors`.
+
 ---
 
 ## 5. Procedimentos de Rollback

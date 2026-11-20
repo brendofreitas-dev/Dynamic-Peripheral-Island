@@ -80,6 +80,57 @@ def _get_hardware_manager() -> Any:
     return HardwareHubManager()
 
 
+def _get_audio_manager() -> Any:
+    try:
+        from dpi_core.audio import AudioMixerManager
+
+        return AudioMixerManager()
+    except Exception:
+        return None
+
+
+def _get_media_manager() -> Any:
+    try:
+        from dpi_core.audio import MediaPlayerManager
+
+        return MediaPlayerManager()
+    except Exception:
+        return None
+
+
+def _safe_audio_state(audio_manager: Any = None) -> Dict[str, Any]:
+    if audio_manager is None:
+        audio_manager = _get_audio_manager()
+    if audio_manager is not None:
+        try:
+            state = audio_manager.get_state()
+            if isinstance(state, dict):
+                return state
+        except Exception as exc:
+            return {
+                "error": str(exc),
+                "master": {},
+                "outputs": [],
+                "mic": {},
+                "inputs": [],
+                "apps": [],
+            }
+    return {"master": {}, "outputs": [], "mic": {}, "inputs": [], "apps": []}
+
+
+def _safe_media_state(media_manager: Any = None) -> Dict[str, Any]:
+    if media_manager is None:
+        media_manager = _get_media_manager()
+    if media_manager is not None:
+        try:
+            state = media_manager.get_state()
+            if isinstance(state, dict):
+                return state
+        except Exception as exc:
+            return {"available": False, "error": str(exc)}
+    return {"available": False}
+
+
 def _safe_hw_snapshot(hw_manager: Any, threshold: int) -> Dict[str, Any]:
     if hw_manager is None:
         try:
@@ -256,6 +307,8 @@ def build_island_payload(
     ag_collector: Optional[AntigravityCollector] = None,
     settings_path: Optional[Path] = None,
     now_ts: Optional[float] = None,
+    audio_manager: Any = None,
+    media_manager: Any = None,
 ) -> Dict[str, Any]:
     """Assemble the complete unified `--island-json` payload."""
     ts = int(now_ts if now_ts is not None else time.time())
@@ -264,6 +317,9 @@ def build_island_payload(
 
     hw_snap = _safe_hw_snapshot(hw_manager, threshold=threshold)
     devices: Dict[str, Any] = hw_snap.get("devices") or {}
+
+    audio_state = _safe_audio_state(audio_manager)
+    media_state = _safe_media_state(media_manager)
 
     collector = ag_collector or AntigravityCollector()
     ag_snap = collector.collect(now_ts=now_ts)
@@ -313,6 +369,8 @@ def build_island_payload(
         },
         "alerts": combined_alerts,
         "peripherals": devices,
+        "audio": audio_state,
+        "media": media_state,
         "antigravity": ag_snap,
         "settings": settings,
     }
@@ -442,6 +500,46 @@ def format_pretty(payload: Dict[str, Any]) -> str:
         lines.append(
             f"  {dot} {bold}{p['name']:<20}{reset} {p['status_text']:<10} {dim}{p['detail_text']}{reset}{pin}"
         )
+
+    audio = payload.get("audio") or {}
+    master = audio.get("master") or {}
+    mic = audio.get("mic") or {}
+    apps = audio.get("apps") or []
+    if master or mic or apps:
+        lines.extend(["", f"{bold}Áudio & Mixer{reset}"])
+        if master:
+            m_vol = master.get("volume", "--")
+            m_muted = f" {red}[MUDO]{reset}" if master.get("muted") else ""
+            m_desc = master.get("description") or master.get("name") or "Master"
+            lines.append(f"  Master: {m_vol}%{m_muted} {dim}[{m_desc}]{reset}")
+        if mic:
+            mic_vol = mic.get("volume", "--")
+            mic_muted = f" {red}[MUDO]{reset}" if mic.get("muted") else ""
+            mic_desc = mic.get("description") or mic.get("name") or "Mic"
+            lines.append(f"  Mic:    {mic_vol}%{mic_muted} {dim}[{mic_desc}]{reset}")
+        if apps:
+            lines.append(f"  {dim}Aplicativos ({len(apps)}):{reset}")
+            for app in apps:
+                app_vol = app.get("volume", "--")
+                app_m = f" {red}[MUDO]{reset}" if app.get("muted") else ""
+                lines.append(f"    - [{app.get('id')}] {app.get('app_name', 'App')}: {app_vol}%{app_m}")
+
+    media = payload.get("media") or {}
+    if media.get("available"):
+        p_name = media.get("player_name", "Mídia")
+        status = media.get("status", "")
+        title = media.get("title", "")
+        artist = media.get("artist", "")
+        pos_s = int(media.get("position_sec") or 0)
+        len_s = int(media.get("length_sec") or 0)
+        pos_str = f"{pos_s // 60}:{pos_s % 60:02d}"
+        len_str = f"{len_s // 60}:{len_s % 60:02d}" if len_s > 0 else "--:--"
+        lines.extend([
+            "",
+            f"{bold}Mídia ({p_name}){reset} [{status}]",
+            f"  {bold}{title}{reset}" + (f" · {artist}" if artist else ""),
+            f"  {dim}{pos_str} / {len_str}{reset}",
+        ])
 
     ag = payload.get("antigravity") or {}
     plan = ag.get("plan") or {}
@@ -607,6 +705,105 @@ def _dispatch_hw_flag(args: argparse.Namespace, hw_manager: Any) -> Optional[Tup
         return False, f"Erro ao executar {action}: {exc}"
 
 
+def _dispatch_audio_flag(args: argparse.Namespace, audio_manager: Any = None) -> Optional[Tuple[bool, str]]:
+    if args.set_master_volume is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.set_master_volume(args.set_master_volume)
+        except Exception as exc:
+            return False, f"Erro ao definir volume master: {exc}"
+    elif args.toggle_master_mute:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.toggle_master_mute()
+        except Exception as exc:
+            return False, f"Erro ao alternar mudo master: {exc}"
+    elif args.set_default_sink is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.set_default_sink(args.set_default_sink)
+        except Exception as exc:
+            return False, f"Erro ao definir saída padrão: {exc}"
+    elif args.set_mic_volume is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.set_mic_volume(args.set_mic_volume)
+        except Exception as exc:
+            return False, f"Erro ao definir volume do microfone: {exc}"
+    elif args.toggle_mic_mute:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.toggle_mic_mute()
+        except Exception as exc:
+            return False, f"Erro ao alternar mudo do microfone: {exc}"
+    elif args.set_default_source is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.set_default_source(args.set_default_source)
+        except Exception as exc:
+            return False, f"Erro ao definir microfone padrão: {exc}"
+    elif args.set_app_volume is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            stream_id, pct = args.set_app_volume
+            return mgr.set_app_volume(int(stream_id), int(pct))
+        except Exception as exc:
+            return False, f"Erro ao definir volume do aplicativo: {exc}"
+    elif args.toggle_app_mute is not None:
+        mgr = audio_manager if audio_manager is not None else _get_audio_manager()
+        if mgr is None:
+            return False, "Gerenciador de áudio indisponível"
+        try:
+            return mgr.toggle_app_mute(int(args.toggle_app_mute))
+        except Exception as exc:
+            return False, f"Erro ao alternar mudo do aplicativo: {exc}"
+
+    return None
+
+
+def _dispatch_media_flag(args: argparse.Namespace, media_manager: Any = None) -> Optional[Tuple[bool, str]]:
+    if args.media_play_pause:
+        mgr = media_manager if media_manager is not None else _get_media_manager()
+        if mgr is None:
+            return False, "Gerenciador de mídia indisponível"
+        try:
+            return mgr.play_pause(bus_name=args.media_player)
+        except Exception as exc:
+            return False, f"Erro ao alternar reprodução/pausa de mídia: {exc}"
+    elif args.media_next:
+        mgr = media_manager if media_manager is not None else _get_media_manager()
+        if mgr is None:
+            return False, "Gerenciador de mídia indisponível"
+        try:
+            return mgr.next_track(bus_name=args.media_player)
+        except Exception as exc:
+            return False, f"Erro ao avançar faixa de mídia: {exc}"
+    elif args.media_prev:
+        mgr = media_manager if media_manager is not None else _get_media_manager()
+        if mgr is None:
+            return False, "Gerenciador de mídia indisponível"
+        try:
+            return mgr.previous_track(bus_name=args.media_player)
+        except Exception as exc:
+            return False, f"Erro ao voltar faixa de mídia: {exc}"
+
+    return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser for dpi-hub."""
     parser = argparse.ArgumentParser(
@@ -633,6 +830,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--controller-id", type=str, default=None, help="ID alvo do controle")
     parser.add_argument("--set-gamepad-layout", type=str, metavar="LAYOUT", help="Define layout (xbox/nintendo)")
 
+    # Audio & Mixer controls (PipeWire / pactl)
+    parser.add_argument("--set-master-volume", type=int, metavar="PCT", help="Define volume master (0..150)")
+    parser.add_argument("--toggle-master-mute", action="store_true", help="Alterna mudo da saída master")
+    parser.add_argument("--set-default-sink", type=str, metavar="NAME", help="Define saída de áudio padrão")
+    parser.add_argument("--set-mic-volume", type=int, metavar="PCT", help="Define volume do microfone (0..150)")
+    parser.add_argument("--toggle-mic-mute", action="store_true", help="Alterna mudo do microfone")
+    parser.add_argument("--set-default-source", type=str, metavar="NAME", help="Define microfone padrão")
+    parser.add_argument("--set-app-volume", nargs=2, type=int, metavar=("ID", "PCT"), help="Define volume do app por stream ID (ID PCT)")
+    parser.add_argument("--toggle-app-mute", type=int, metavar="ID", help="Alterna mudo do app por stream ID")
+
+    # Media player controls (Spotify / MPRIS2)
+    parser.add_argument("--media-play-pause", action="store_true", help="Alterna reprodução/pausa no player MPRIS2")
+    parser.add_argument("--media-next", action="store_true", help="Avança faixa no player MPRIS2")
+    parser.add_argument("--media-prev", action="store_true", help="Volta faixa no player MPRIS2")
+    parser.add_argument("--media-player", type=str, default=None, metavar="BUS", help="Define bus do player MPRIS2 (ex: org.mpris.MediaPlayer2.spotify)")
+
     # Settings controls
     parser.add_argument("--pin-device", type=str, metavar="DEV[:BOOL]", help="Fixa/desafixa periférico na barra")
     parser.add_argument("--pin-quota", type=str, metavar="GROUP", help="Fixa grupo de cota Antigravity na barra")
@@ -648,6 +861,8 @@ def main(
     hw_manager: Any = None,
     ag_collector: Optional[AntigravityCollector] = None,
     settings_path: Optional[Path] = None,
+    audio_manager: Any = None,
+    media_manager: Any = None,
 ) -> int:
     """CLI entrypoint."""
     parser = build_parser()
@@ -665,10 +880,24 @@ def main(
         print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False))
         return 0 if ok else 1
 
+    audio_res = _dispatch_audio_flag(args, audio_manager)
+    if audio_res is not None:
+        ok, msg = audio_res
+        print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False))
+        return 0 if ok else 1
+
+    media_res = _dispatch_media_flag(args, media_manager)
+    if media_res is not None:
+        ok, msg = media_res
+        print(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False))
+        return 0 if ok else 1
+
     payload = build_island_payload(
         hw_manager=hw_manager,
         ag_collector=ag_collector,
         settings_path=settings_path,
+        audio_manager=audio_manager,
+        media_manager=media_manager,
     )
 
     if args.waybar:

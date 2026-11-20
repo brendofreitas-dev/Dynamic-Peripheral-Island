@@ -80,6 +80,13 @@ function clamp(val, min, max) {
     return Math.max(min, Math.min(max, val));
 }
 
+function formatSecondsToTime(totalSec) {
+    let s = Math.max(0, Math.round(Number(totalSec) || 0));
+    let mins = Math.floor(s / 60);
+    let secs = s % 60;
+    return mins + ":" + (secs < 10 ? "0" + secs : secs);
+}
+
 function pctSeverityClass(pct, lowThresh) {
     let thresh = lowThresh || 20;
     if (pct === null || pct === undefined || isNaN(pct)) return "muted";
@@ -136,6 +143,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             headset: false,
             gamepad: false,
             keyboard: false,
+            media: true,
+            master_audio: true,
+            per_app_audio: true,
         };
         this._resolvedTheme = "dark";
         this._pollSeconds = DEFAULT_POLL_SECONDS;
@@ -1149,8 +1159,11 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             headset: true,
             gamepad: true,
             keyboard: true,
+            media: true,
+            master_audio: true,
+            per_app_audio: true,
         };
-        for (let tabId of ["peripherals", "antigravity", "settings"]) {
+        for (let tabId of ["peripherals", "audio", "antigravity", "settings"]) {
             this._activeTab = tabId;
             this._renderPopover();
         }
@@ -1628,6 +1641,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._bodyStack.destroy_all_children();
         if (this._activeTab === "peripherals") {
             this._renderPeripheralsTab();
+        } else if (this._activeTab === "audio") {
+            this._renderAudioTab();
         } else if (this._activeTab === "antigravity") {
             this._renderAntigravityTab();
         } else {
@@ -1637,7 +1652,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _switchTab(newTabId, animate = true) {
         if (!this._popoverRoot) return;
-        let order = ["peripherals", "antigravity", "settings"];
+        let order = ["peripherals", "audio", "antigravity", "settings"];
         let oldIdx = Math.max(0, order.indexOf(this._activeTab));
         let newIdx = Math.max(0, order.indexOf(newTabId));
         let dir = newIdx >= oldIdx ? 1 : -1;
@@ -1653,13 +1668,35 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
             this._bodyStack.opacity = 0;
-            this._bodyStack.translation_x = dir * 14;
-            this._bodyStack.ease({
+            this._bodyStack.scale_x = 0.98;
+            this._bodyStack.scale_y = 0.98;
+            this._bodyStack.translation_x = dir * 24;
+
+            if (typeof this._bodyStack.set_pivot_point === "function") {
+                try {
+                    this._bodyStack.set_pivot_point(0.5, 0.5);
+                } catch (e) {
+                    // ignore
+                }
+            }
+
+            let easeParams = {
                 opacity: 255,
+                scale_x: 1.0,
+                scale_y: 1.0,
                 translation_x: 0,
-                duration: 180,
-                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-            });
+                duration: 240,
+                mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+            };
+            try {
+                const Graphene = imports.gi.Graphene;
+                if (Graphene && Graphene.Point) {
+                    easeParams.pivot_point = new Graphene.Point({ x: 0.5, y: 0.5 });
+                }
+            } catch (e) {
+                // ignore
+            }
+            this._bodyStack.ease(easeParams);
         }
     }
 
@@ -1748,6 +1785,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._tabBar.destroy_all_children();
         let tabs = [
             { id: "peripherals", label: "Perifericos", icon: "input-mouse-symbolic" },
+            { id: "audio", label: "Áudio", icon: "audio-headphones-symbolic" },
             { id: "antigravity", label: "Antigravity VU", icon: "applications-science-symbolic" },
             { id: "settings", label: "Ajustes", icon: "preferences-system-symbolic" },
         ];
@@ -2283,6 +2321,374 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
                 body.add_child(row);
             }
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    /* ======================================================================
+     * Tab: Áudio & Mídia (Spotify MPRIS2 & Mixer Volum)
+     * ====================================================================== */
+
+    _renderAudioTab() {
+        let media = (this._data && this._data.media) || {};
+        let audio = (this._data && this._data.audio) || {};
+
+        this._bodyStack.add_child(this._buildMediaPlayerCard(media));
+        this._bodyStack.add_child(this._buildAudioMixerCard(audio));
+        this._bodyStack.add_child(this._buildPerAppAudioCard(audio));
+    }
+
+    _buildMediaPlayerCard(media) {
+        let expanded = this._expandedCards.media !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let isAvailable = Boolean(media && media.available);
+        let isPlaying = isAvailable && media.status === "Playing";
+        let isPaused = isAvailable && media.status === "Paused";
+
+        let statusBadge = isPlaying ? "Tocando" : (isPaused ? "Pausado" : "Inativo");
+        let statusTone = isPlaying ? "ok" : "muted";
+
+        let timeStr = "";
+        if (isAvailable && media.length_sec) {
+            timeStr = formatSecondsToTime(media.position_sec) + " / " + formatSecondsToTime(media.length_sec);
+        }
+
+        let header = this._buildCardHeader({
+            cardKey: "media",
+            icon: "multimedia-player-symbolic",
+            title: media.player_name || "Spotify",
+            badgeText: statusBadge,
+            badgeTone: statusTone,
+            metricText: timeStr,
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "media");
+
+            if (!isAvailable) {
+                let inactiveLabel = new St.Label({
+                    text: "Spotify / Mídia inativo — abra um player para controlar",
+                    style_class: "dpi-subtitle",
+                });
+                body.add_child(inactiveLabel);
+            } else {
+                // Track Title & Artist
+                let trackBox = new St.BoxLayout({ vertical: true, style: "spacing: 2px;" });
+                let titleLabel = new St.Label({
+                    text: media.title || "Sem título",
+                    style_class: "dpi-media-title",
+                });
+                titleLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+                trackBox.add_child(titleLabel);
+
+                let subtitle = media.artist || "Artista desconhecido";
+                if (media.album) subtitle += " · " + media.album;
+                let artistLabel = new St.Label({
+                    text: subtitle,
+                    style_class: "dpi-subtitle",
+                });
+                artistLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+                trackBox.add_child(artistLabel);
+                body.add_child(trackBox);
+
+                // Progress Bar with Time Labels
+                let progressRow = new St.BoxLayout({
+                    style: "spacing: 8px;",
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    x_expand: true,
+                });
+                let posLabel = new St.Label({
+                    text: formatSecondsToTime(media.position_sec),
+                    style_class: "dpi-subtitle",
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                let lenLabel = new St.Label({
+                    text: formatSecondsToTime(media.length_sec),
+                    style_class: "dpi-subtitle",
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                progressRow.add_child(posLabel);
+                let progressPct = clamp(Number(media.progress_pct) || 0, 0, 100);
+                progressRow.add_child(this._makeProgressBar(progressPct, "purple", null, 340));
+                progressRow.add_child(lenLabel);
+                body.add_child(progressRow);
+
+                // Transport Controls
+                let controlsRow = new St.BoxLayout({
+                    style_class: "dpi-media-controls",
+                    style: "spacing: 14px;",
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                    x_expand: true,
+                });
+
+                let prevBtn = this._makeActionButton(
+                    "media-skip-backward-symbolic",
+                    "",
+                    null,
+                    () => this._dispatchCliAction(["--media-prev"], "Faixa anterior...")
+                );
+                let playPauseIcon = isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic";
+                let playPauseBtn = this._makeActionButton(
+                    playPauseIcon,
+                    "",
+                    "primary",
+                    () => this._dispatchCliAction(["--media-play-pause"], "Play/Pause...")
+                );
+                let nextBtn = this._makeActionButton(
+                    "media-skip-forward-symbolic",
+                    "",
+                    null,
+                    () => this._dispatchCliAction(["--media-next"], "Próxima faixa...")
+                );
+
+                controlsRow.add_child(prevBtn);
+                controlsRow.add_child(playPauseBtn);
+                controlsRow.add_child(nextBtn);
+                body.add_child(controlsRow);
+            }
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    _buildAudioMixerCard(audio) {
+        let expanded = this._expandedCards.master_audio !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let master = (audio && audio.master) || {};
+        let mic = (audio && audio.mic) || {};
+        let masterVol = Number(master.volume) || 0;
+        let masterMuted = Boolean(master.muted);
+
+        let header = this._buildCardHeader({
+            cardKey: "master_audio",
+            icon: masterMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic",
+            title: "Mixer Master & Microfone",
+            badgeText: masterMuted ? "Mudo" : masterVol + "%",
+            badgeTone: masterMuted ? "warn" : "ok",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 10px;", x_expand: true });
+            this._animateCardBody(body, "master_audio");
+
+            // --- Section: Master Output ---
+            body.add_child(this._makeSectionLabel("SAÍDA PRINCIPAL (MASTER)"));
+
+            let outDesc = master.description || master.name || "Saída Padrão";
+            let outLabel = new St.Label({ text: outDesc, style_class: "dpi-subtitle" });
+            outLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            body.add_child(outLabel);
+
+            body.add_child(this._makeProgressBar(Math.min(100, masterVol), masterMuted ? "warn" : "ok", null, 430));
+
+            // Controls row: Mute + Steps
+            let masterCtrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
+            masterCtrlRow.add_child(this._makeActionButton(
+                masterMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic",
+                masterMuted ? "Desmutar" : "Mudo",
+                masterMuted ? "warn" : null,
+                () => this._dispatchCliAction(["--toggle-master-mute"], "Alternando mute master...")
+            ));
+            masterCtrlRow.add_child(this._makeActionButton(
+                null,
+                "-5%",
+                null,
+                () => this._dispatchCliAction(["--set-master-volume", String(Math.max(0, masterVol - 5))], "Volume -5%...")
+            ));
+            masterCtrlRow.add_child(this._makeActionButton(
+                null,
+                "+5%",
+                null,
+                () => this._dispatchCliAction(["--set-master-volume", String(Math.min(150, masterVol + 5))], "Volume +5%...")
+            ));
+            body.add_child(masterCtrlRow);
+
+            // Volume Presets (25%, 50%, 75%, 100%)
+            let volPresets = [
+                { label: "25%", value: 25 },
+                { label: "50%", value: 50 },
+                { label: "75%", value: 75 },
+                { label: "100%", value: 100 },
+            ];
+            body.add_child(this._makeChipRow(
+                volPresets,
+                masterVol,
+                (v) => this._dispatchCliAction(["--set-master-volume", String(v)], "Volume Master " + v + "%...")
+            ));
+
+            // Output Sinks Switcher
+            let outputs = Array.isArray(audio.outputs) ? audio.outputs : [];
+            if (outputs.length > 0) {
+                body.add_child(this._makeSectionLabel("DISPOSITIVO DE SAÍDA"));
+                let defaultOut = outputs.find((o) => o.is_default) || outputs[0];
+                let sinkChips = outputs.map((o) => ({
+                    label: o.short_name || o.description || o.name,
+                    value: o.name,
+                }));
+                body.add_child(this._makeChipRow(
+                    sinkChips,
+                    defaultOut ? defaultOut.name : null,
+                    (sinkName) => this._dispatchCliAction(["--set-default-sink", sinkName], "Definindo saída de áudio...")
+                ));
+            }
+
+            // --- Section: Microphone ---
+            body.add_child(this._makeSectionLabel("MICROFONE"));
+
+            let micVol = Number(mic.volume) || 0;
+            let micMuted = Boolean(mic.muted);
+            let micDesc = mic.description || mic.name || "Microfone Padrão";
+            let micLabel = new St.Label({ text: micDesc, style_class: "dpi-subtitle" });
+            micLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            body.add_child(micLabel);
+
+            body.add_child(this._makeProgressBar(Math.min(100, micVol), micMuted ? "warn" : "info", null, 430));
+
+            let micCtrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
+            micCtrlRow.add_child(this._makeActionButton(
+                micMuted ? "microphone-sensitivity-muted-symbolic" : "audio-input-microphone-symbolic",
+                micMuted ? "Desmutar" : "Mudo",
+                micMuted ? "warn" : null,
+                () => this._dispatchCliAction(["--toggle-mic-mute"], "Alternando mute mic...")
+            ));
+            micCtrlRow.add_child(this._makeActionButton(
+                null,
+                "-10%",
+                null,
+                () => this._dispatchCliAction(["--set-mic-volume", String(Math.max(0, micVol - 10))], "Ganho mic -10%...")
+            ));
+            micCtrlRow.add_child(this._makeActionButton(
+                null,
+                "+10%",
+                null,
+                () => this._dispatchCliAction(["--set-mic-volume", String(Math.min(150, micVol + 10))], "Ganho mic +10%...")
+            ));
+            body.add_child(micCtrlRow);
+
+            // Input Sources Switcher (if > 1)
+            let inputs = Array.isArray(audio.inputs) ? audio.inputs : [];
+            if (inputs.length > 1) {
+                body.add_child(this._makeSectionLabel("DISPOSITIVO DE ENTRADA"));
+                let defaultIn = inputs.find((i) => i.is_default) || inputs[0];
+                let srcChips = inputs.map((i) => ({
+                    label: i.short_name || i.description || i.name,
+                    value: i.name,
+                }));
+                body.add_child(this._makeChipRow(
+                    srcChips,
+                    defaultIn ? defaultIn.name : null,
+                    (srcName) => this._dispatchCliAction(["--set-default-source", srcName], "Definindo microfone...")
+                ));
+            }
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    _buildPerAppAudioCard(audio) {
+        let expanded = this._expandedCards.per_app_audio !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let apps = Array.isArray(audio && audio.apps) ? audio.apps : [];
+        let header = this._buildCardHeader({
+            cardKey: "per_app_audio",
+            icon: "audio-card-symbolic",
+            title: "Mixer por Aplicativo",
+            badgeText: apps.length > 0 ? apps.length + " ativo(s)" : "Inativo",
+            badgeTone: apps.length > 0 ? "info" : "muted",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "per_app_audio");
+
+            if (apps.length === 0) {
+                let emptyLabel = new St.Label({
+                    text: "Nenhum aplicativo reproduzindo áudio no momento",
+                    style_class: "dpi-subtitle",
+                });
+                body.add_child(emptyLabel);
+            } else {
+                for (let app of apps) {
+                    let appBox = new St.BoxLayout({
+                        vertical: true,
+                        style_class: "dpi-app-audio-item",
+                        style: "spacing: 4px;",
+                        x_expand: true,
+                    });
+
+                    let topRow = new St.BoxLayout({
+                        style: "spacing: 6px;",
+                        y_align: Clutter.ActorAlign.CENTER,
+                        x_expand: true,
+                    });
+                    topRow.add_child(new St.Icon({
+                        icon_name: app.icon_name || "audio-x-generic-symbolic",
+                        icon_type: St.IconType.SYMBOLIC,
+                        icon_size: 14,
+                    }));
+                    let nameLabel = new St.Label({
+                        text: app.app_name || ("Stream #" + app.id),
+                        style_class: "dpi-bold",
+                        x_expand: true,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    });
+                    nameLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+                    topRow.add_child(nameLabel);
+
+                    let appVol = Number(app.volume) || 0;
+                    let appMuted = Boolean(app.muted);
+                    topRow.add_child(new St.Label({
+                        text: appMuted ? "Mudo" : appVol + "%",
+                        style_class: "dpi-card-metric",
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }));
+                    appBox.add_child(topRow);
+
+                    appBox.add_child(this._makeProgressBar(Math.min(100, appVol), appMuted ? "warn" : "info", null, 430));
+
+                    let ctrlRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
+                    ctrlRow.add_child(this._makeActionButton(
+                        appMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic",
+                        appMuted ? "Desmutar" : "Mudo",
+                        appMuted ? "warn" : null,
+                        () => this._dispatchCliAction(["--toggle-app-mute", String(app.id)], "Alternando mute " + app.app_name + "...")
+                    ));
+                    ctrlRow.add_child(this._makeActionButton(
+                        null,
+                        "-10%",
+                        null,
+                        () => this._dispatchCliAction(["--set-app-volume", String(app.id), String(Math.max(0, appVol - 10))], "Volume app -10%...")
+                    ));
+                    ctrlRow.add_child(this._makeActionButton(
+                        null,
+                        "+10%",
+                        null,
+                        () => this._dispatchCliAction(["--set-app-volume", String(app.id), String(Math.min(150, appVol + 10))], "Volume app +10%...")
+                    ));
+                    appBox.add_child(ctrlRow);
+
+                    body.add_child(appBox);
+                }
+            }
+
             card.add_child(body);
         }
 

@@ -5,6 +5,21 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-11-20
+
+### Adicionado
+- **FEAT-004 (AudioMixerManager Inspirado no Volum para Linux/PipeWire)**:
+  - `src/dpi_core/audio.py`: implementado gerenciador de mixer de áudio 100% em Python 3 stdlib via `pactl`, com parsing de saída Master (volume 0..150%, mute, estado), seletor de dispositivos de saída em 1 clique, entrada de microfone (com isolamento estrito de fontes `.monitor`) e controle de volume/mudo independente por aplicativo (`sink-inputs`).
+- **FEAT-005 (MediaPlayerManager com Suporte Nativo a Spotify e MPRIS2)**:
+  - `src/dpi_core/audio.py`: descoberta automática de players MPRIS2 via `gdbus`, com priorização do Spotify, parser GVariant nativo stdlib para metadados (título, artista, álbum, arte, duração, posição e percentual de progresso) e controles de transporte (`play_pause`, `next_track`, `previous_track`).
+- **UX-014 (Nova Aba Áudio no Popover, Estética LiquidGlass e Transições Fluidas)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: expansão para 4 abas no TabBar (`Periféricos` | `Áudio` | `Antigravity VU` | `Ajustes`), integrando os cards do reprodutor Spotify/MPRIS2, controle Master/Mic e mixer por aplicativo.
+  - `stylesheet.css`: linguagem visual **LiquidGlass** com superfícies translúcidas em camadas (`rgba(38, 40, 54, 0.82)`), bordas especulares sutis (`rgba(255, 255, 255, 0.14)`), glow suave na aba ativa e transição fluida multieixo (`scale`, `translation_x`, `opacity` com curva `EASE_OUT_EXPO`).
+- **Novas Flags de Linha de Comando no `dpi-hub`**:
+  - Flags de áudio: `--set-master-volume`, `--toggle-master-mute`, `--set-default-sink`, `--set-mic-volume`, `--toggle-mic-mute`, `--set-default-source`, `--set-app-volume` e `--toggle-app-mute`.
+  - Flags de mídia: `--media-play-pause`, `--media-next`, `--media-prev` e `--media-player`.
+  - Inclusão dos objetos `audio` e `media` no payload `--island-json` e visualização formatada no dashboard `--pretty`.
+
 ## [1.0.11] - 2026-11-20
 
 ### Adicionado

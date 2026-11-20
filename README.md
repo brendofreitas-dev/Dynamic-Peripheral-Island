@@ -32,7 +32,7 @@ Construído 100% em **Python 3 stdlib** (zero dependências externas no core) e 
 ```
 
 - **Layout Central Balanceado**: organiza os **Periféricos** à esquerda, o relógio do sistema (**Data e Hora** via `calendar@cinnamon.org`) no centro e o monitor de **Antigravity** à direita.
-- **True Apple Phone Notch na TopBar**: geometria autêntica colada na borda superior da tela (`border-radius: 0 0 16px 16px; margin-top: 0;`), acabamento premium em vidro escuro translúcido com bordas especulares laterais/inferiores e expansão orgânica elegante no hover (`.dpi-capsule-hovered` / `.dpi-capsule-open`).
+- **True Apple Phone Notch na TopBar**: geometria autêntica colada na borda superior da tela (`border-radius: 0 0 16px 16px; margin-top: 0;`), com suporte a 3 estilos visuais configuráveis: **Notch Sólido / Obsidian** (padrão `#0b0c12`), **Clear Glass** (vidro translúcido LiquidGlass) e **Pílula Flutuante** (`border-radius: 999px`), com expansão orgânica elegante no hover (`.dpi-capsule-hovered` / `.dpi-capsule-open`).
 - **Expansão Imediata em 1 Clique**: clique direto nos segmentos de Periféricos ou Antigravity abre instantaneamente o Popover Bento Grid completo (`700px`), sem barras flutuantes intermediárias interceptando a interação.
 - **Popover Bento Grid Completo**: painel de 700px fixos em 2 colunas com 5 abas (`Periféricos`, `Áudio`, `Sistema`, `Antigravity VU`, `Ajustes`), transições 100% GPU sem flash em branco e zero barras de rolagem vertical.
 - **Tooltips Animados LiquidGlass**: microinteração flutuante suave com escala e slide posicionada de forma limpa 6px abaixo da barra superior.
@@ -157,6 +157,7 @@ dpi-hub --pretty        # Dashboard colorido no terminal
 | **Preferências** | `--pin-device <DEV[:BOOL]>` | `dpi-hub --pin-device headset:true` |
 | | `--pin-quota <GROUP>` | `dpi-hub --pin-quota neon` |
 | | `--set-theme <auto\|dark\|light>` | `dpi-hub --set-theme auto` |
+| | `--set-notch-style <obsidian\|glass\|pill>` | `dpi-hub --set-notch-style obsidian` |
 | | `--set-alert-threshold <PCT>` | `dpi-hub --set-alert-threshold 20` |
 | | `--set-poll-interval <SEC>` | `dpi-hub --set-poll-interval 5` |
 

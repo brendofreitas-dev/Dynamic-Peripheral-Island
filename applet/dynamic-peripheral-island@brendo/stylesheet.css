@@ -99,6 +99,142 @@
     border-radius: 0 0 16px 16px;
 }
 
+/* ==========================================================================
+ * Notch Styles: Obsidian, Glass, Pill (FEAT-008)
+ * ========================================================================== */
+
+/* --- 1. Obsidian (Notch Sólido - Padrão) --- */
+
+.dpi-notch-obsidian {
+    border-radius: 0 0 16px 16px;
+    margin-top: 0;
+    padding: 0 12px 1px 12px;
+}
+
+.dpi-notch-obsidian.dpi-theme-dark {
+    background-color: #0b0c12;
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40);
+    color: #F8FAFC;
+}
+
+.dpi-notch-obsidian.dpi-theme-light {
+    background-color: #f1f5f9;
+    border-top: none;
+    border-left: 1px solid rgba(15, 23, 42, 0.10);
+    border-right: 1px solid rgba(15, 23, 42, 0.10);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
+    color: #0F172A;
+}
+
+.dpi-notch-obsidian.dpi-theme-dark.dpi-capsule-hovered,
+.dpi-notch-obsidian.dpi-theme-dark.dpi-capsule-open {
+    background-color: rgba(18, 20, 30, 0.98);
+    border-bottom-color: rgba(189, 147, 249, 0.55);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.50);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
+}
+
+.dpi-notch-obsidian.dpi-theme-light.dpi-capsule-hovered,
+.dpi-notch-obsidian.dpi-theme-light.dpi-capsule-open {
+    background-color: rgba(255, 255, 255, 0.98);
+    border-bottom-color: rgba(147, 51, 234, 0.45);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
+}
+
+/* --- 2. Clear Glass (LiquidGlass) --- */
+
+.dpi-notch-glass {
+    border-radius: 0 0 16px 16px;
+    margin-top: 0;
+    padding: 0 12px 1px 12px;
+}
+
+.dpi-notch-glass.dpi-theme-dark {
+    background-color: rgba(24, 26, 38, 0.58);
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.22);
+    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+    color: #F8FAFC;
+}
+
+.dpi-notch-glass.dpi-theme-light {
+    background-color: rgba(248, 250, 252, 0.62);
+    border-top: none;
+    border-left: 1px solid rgba(15, 23, 42, 0.16);
+    border-right: 1px solid rgba(15, 23, 42, 0.16);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.16);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);
+    color: #0F172A;
+}
+
+.dpi-notch-glass.dpi-theme-dark.dpi-capsule-hovered,
+.dpi-notch-glass.dpi-theme-dark.dpi-capsule-open {
+    background-color: rgba(30, 32, 46, 0.72);
+    border-bottom-color: rgba(189, 147, 249, 0.65);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
+}
+
+.dpi-notch-glass.dpi-theme-light.dpi-capsule-hovered,
+.dpi-notch-glass.dpi-theme-light.dpi-capsule-open {
+    background-color: rgba(255, 255, 255, 0.82);
+    border-bottom-color: rgba(147, 51, 234, 0.50);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
+}
+
+/* --- 3. Pill (Pílula Flutuante) --- */
+
+.dpi-notch-pill {
+    border-radius: 999px;
+    margin: 2px 0;
+    padding: 0 14px;
+}
+
+.dpi-notch-pill.dpi-theme-dark {
+    background-color: rgba(18, 20, 30, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    color: #F8FAFC;
+}
+
+.dpi-notch-pill.dpi-theme-light {
+    background-color: rgba(248, 250, 252, 0.90);
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    color: #0F172A;
+}
+
+.dpi-notch-pill.dpi-theme-dark.dpi-capsule-hovered,
+.dpi-notch-pill.dpi-theme-dark.dpi-capsule-open {
+    background-color: rgba(24, 26, 38, 0.96);
+    border-color: rgba(189, 147, 249, 0.55);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    padding: 0 18px;
+    border-radius: 999px;
+}
+
+.dpi-notch-pill.dpi-theme-light.dpi-capsule-hovered,
+.dpi-notch-pill.dpi-theme-light.dpi-capsule-open {
+    background-color: rgba(255, 255, 255, 0.98);
+    border-color: rgba(147, 51, 234, 0.45);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+    padding: 0 18px;
+    border-radius: 999px;
+}
+
 /* Left slot holding Peripherals on the left side of Clock */
 .dpi-left-slot {
     spacing: 4px;

@@ -5,6 +5,23 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.2] - 2026-11-20
+
+### Adicionado
+- **FEAT-008 (Estilo de Notch Configurável: Obsidian Padrão, Clear Glass e Pílula Flutuante)**:
+  - `src/dpi_core/cli.py` & `bin/dpi-hub`:
+    - Adicionada preferência `notch_style: "obsidian"` em `DEFAULT_SETTINGS` (valores válidos: `obsidian`, `glass`, `pill`), retornada automaticamente no payload `--island-json`.
+    - Nova flag de controle CLI `--set-notch-style <STYLE>` com persistência em `settings.json` e validação estrita de escolhas.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`:
+    - Implementados 3 estilos de Notch para a TopBar:
+      - `.dpi-notch-obsidian` (Padrão — Notch Sólido): fundo sólido profundo (`#0b0c12` dark / `#f1f5f9` light), `border-radius: 0 0 16px 16px; margin-top: 0;` e expansão orgânica (`padding: 0 16px; border-bottom-color: rgba(189, 147, 249, 0.55);`).
+      - `.dpi-notch-glass` (Clear Glass / LiquidGlass): acabamento em vidro translúcido (`rgba(24, 26, 38, 0.58)` dark / `rgba(248, 250, 252, 0.62)` light) com bordas especulares sutis e brilho suave.
+      - `.dpi-notch-pill` (Pílula Flutuante): cápsula clássica flutuante (`border-radius: 999px; margin: 2px 0; padding: 0 14px;`) expandindo no hover.
+    - 211 regras CSS válidas e chaves balanceadas com conformidade ao Design System.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Adicionado método `_applyNotchStyle()` acionado em `_attachUnifiedCapsule()`, `_applyTheme()` e `_updateTopBar()`.
+    - Nova seção interativa **`ESTILO DO NOTCH`** na coluna direita da aba `Ajustes` com chips seletores (`Notch Sólido`, `Clear Glass`, `Pílula`), aplicando a alteração imediatamente e despachando `--set-notch-style`.
+
 ## [1.3.1] - 2026-11-20
 
 ### Corrigido / Aprimorado

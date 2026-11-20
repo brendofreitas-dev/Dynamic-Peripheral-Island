@@ -26,6 +26,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "battery_alert_threshold": 20,
     "poll_interval": 5,
     "theme_mode": "auto",
+    "notch_style": "obsidian",
 }
 
 DEFAULT_SETTINGS_PATH = Path.home() / ".config" / "dynamic-peripheral-island" / "settings.json"
@@ -725,6 +726,14 @@ def _handle_settings_flag(args: argparse.Namespace, settings_path: Optional[Path
         save_settings(settings, settings_path)
         return True, f"Intervalo de polling definido para {sec}s"
 
+    if args.set_notch_style is not None:
+        style = args.set_notch_style.strip().lower()
+        if style not in {"obsidian", "glass", "pill"}:
+            return False, f"Estilo do Notch inválido: {style}. Use obsidian, glass ou pill"
+        settings["notch_style"] = style
+        save_settings(settings, settings_path)
+        return True, f"Estilo do Notch alterado para '{style}'"
+
     return None
 
 
@@ -920,6 +929,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--set-theme", type=str, metavar="MODE", help="Define tema (auto/dark/light)")
     parser.add_argument("--set-alert-threshold", type=int, metavar="PCT", help="Define limiar de bateria baixa (5..50)")
     parser.add_argument("--set-poll-interval", type=int, metavar="SEC", help="Define intervalo de coleta (1..60)")
+    parser.add_argument(
+        "--set-notch-style",
+        type=str,
+        choices=["obsidian", "glass", "pill"],
+        metavar="STYLE",
+        help="Define estilo do Notch (obsidian/glass/pill)",
+    )
 
     return parser
 

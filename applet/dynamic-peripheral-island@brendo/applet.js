@@ -53,6 +53,11 @@ const THEME_MODE_OPTIONS = [
     { id: "dark", label: "Dark" },
     { id: "light", label: "Light" },
 ];
+const NOTCH_STYLE_OPTIONS = [
+    { id: "obsidian", label: "Notch Sólido" },
+    { id: "glass", label: "Clear Glass" },
+    { id: "pill", label: "Pílula" },
+];
 const K500_DEFAULT_SHORTCUTS = [
     { keys: "FN + INS", desc: "Alternar modo de iluminacao RGB" },
     { keys: "FN + ↑ / ↓", desc: "Ajustar brilho do backlight" },
@@ -317,6 +322,33 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
         if (this._tooltipActor) {
             this._applyThemeToActor(this._tooltipActor, this._resolvedTheme);
+        }
+        this._applyNotchStyle();
+    }
+
+    _applyNotchStyle() {
+        let settings = (this._data && this._data.settings) || {};
+        let style = settings.notch_style || "obsidian";
+        let validStyles = ["obsidian", "glass", "pill"];
+        if (validStyles.indexOf(style) === -1) {
+            style = "obsidian";
+        }
+        let targetClass = "dpi-notch-" + style;
+
+        let targets = [this._unifiedCenterBox, this.actor].filter(Boolean);
+        for (let target of targets) {
+            try {
+                for (let s of validStyles) {
+                    let cls = "dpi-notch-" + s;
+                    if (cls === targetClass) {
+                        target.add_style_class_name(cls);
+                    } else {
+                        target.remove_style_class_name(cls);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
         }
     }
 
@@ -647,6 +679,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
             this._syncCapsuleOpenState();
         }
+
+        this._applyNotchStyle();
     }
 
     _onCalendarOpenStateChanged(isOpen) {
@@ -766,6 +800,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._unifiedCenterBox.remove_style_class_name("dpi-capsule-open");
                 this._unifiedCenterBox.remove_style_class_name("dpi-theme-dark");
                 this._unifiedCenterBox.remove_style_class_name("dpi-theme-light");
+                this._unifiedCenterBox.remove_style_class_name("dpi-notch-obsidian");
+                this._unifiedCenterBox.remove_style_class_name("dpi-notch-glass");
+                this._unifiedCenterBox.remove_style_class_name("dpi-notch-pill");
             } catch (e) {
                 // actor might already be disposed during panel teardown
             }
@@ -783,6 +820,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this.actor.remove_style_class_name("dpi-standalone-capsule");
         this.actor.remove_style_class_name("dpi-capsule-hovered");
         this.actor.remove_style_class_name("dpi-capsule-open");
+        this.actor.remove_style_class_name("dpi-notch-obsidian");
+        this.actor.remove_style_class_name("dpi-notch-glass");
+        this.actor.remove_style_class_name("dpi-notch-pill");
     }
 
     on_applet_removed_from_panel() {
@@ -1271,6 +1311,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (!this._data) return;
 
         this._clearPillTooltips();
+        this._applyNotchStyle();
 
         let settings = this._data.settings || {};
         let threshold = Number(settings.battery_alert_threshold) || 20;
@@ -3470,6 +3511,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             battery_alert_threshold: 20,
             poll_interval: 5,
             theme_mode: "auto",
+            notch_style: "obsidian",
         };
 
         let grid = new St.BoxLayout({
@@ -3576,6 +3618,19 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             THEME_MODE_OPTIONS.map((t) => ({ label: t.label, value: t.id })),
             settings.theme_mode || "auto",
             (mode) => this._dispatchCliAction(["--set-theme", mode], "Tema alterado para " + mode)
+        ));
+
+        sysCard.add_child(this._makeSectionLabel("ESTILO DO NOTCH"));
+        sysCard.add_child(this._makeChipRow(
+            NOTCH_STYLE_OPTIONS.map((s) => ({ label: s.label, value: s.id })),
+            settings.notch_style || "obsidian",
+            (style) => {
+                if (this._data && this._data.settings) {
+                    this._data.settings.notch_style = style;
+                }
+                this._applyNotchStyle();
+                this._dispatchCliAction(["--set-notch-style", style], "Estilo do Notch: " + style);
+            }
         ));
 
         sysCard.add_child(new St.Label({

@@ -305,11 +305,14 @@ class TestCliAndOutputs(unittest.TestCase):
             self.assertIn("enp7s0", out_p)
 
     def test_cli_settings_pin_and_hardware_control_actions(self) -> None:
+        # FEAT-008: Default notch style is obsidian
+        self.assertEqual(cli.DEFAULT_SETTINGS["notch_style"], "obsidian")
+
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = Path(tmp) / "settings.json"
             hw = _mock_hw_manager()
 
-            # Pin device & quota & theme & threshold & poll interval
+            # Pin device & quota & theme & threshold & poll interval & notch style
             for argv in (
                 ["--pin-device", "mouse=false"],
                 ["--pin-device", "headset=true"],
@@ -317,6 +320,7 @@ class TestCliAndOutputs(unittest.TestCase):
                 ["--set-theme", "dark"],
                 ["--set-alert-threshold", "15"],
                 ["--set-poll-interval", "10"],
+                ["--set-notch-style", "glass"],
             ):
                 rc, out = self._run_cli(argv, settings_path=settings_path, hw=hw)
                 self.assertEqual(rc, 0)
@@ -330,11 +334,16 @@ class TestCliAndOutputs(unittest.TestCase):
             self.assertEqual(saved["theme_mode"], "dark")
             self.assertEqual(saved["battery_alert_threshold"], 15)
             self.assertEqual(saved["poll_interval"], 10)
+            self.assertEqual(saved["notch_style"], "glass")
 
             # Invalid setting rejected cleanly
             rc_bad, out_bad = self._run_cli(["--set-theme", "neon-pink"], settings_path=settings_path, hw=hw)
             self.assertEqual(rc_bad, 1)
             self.assertFalse(json.loads(out_bad)["ok"])
+
+            with self.assertRaises(SystemExit) as cm:
+                self._run_cli(["--set-notch-style", "neon-pill"], settings_path=settings_path, hw=hw)
+            self.assertEqual(cm.exception.code, 2)
 
             # Hardware control flags dispatch properly
             for argv, expected_action in (
@@ -571,6 +580,12 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("this._tooltipTimerId", src)
         self.assertNotIn("this._peekActor", src)
 
+        # FEAT-008: Configurable Notch styles (obsidian, glass, pill)
+        self.assertIn("_applyNotchStyle()", src)
+        self.assertIn("NOTCH_STYLE_OPTIONS", src)
+        self.assertIn("ESTILO DO NOTCH", src)
+        self.assertIn("dpi-notch-obsidian", src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -613,6 +628,9 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-ag-col-left",
             ".dpi-ag-col-right",
             ".dpi-glass-tooltip",
+            ".dpi-notch-obsidian",
+            ".dpi-notch-glass",
+            ".dpi-notch-pill",
         ):
             self.assertIn(required_cls, css)
 
@@ -651,6 +669,19 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIsNotNone(capsule_hover)
         self.assertIn("padding: 0 16px 1px 16px;", capsule_hover.group(1))
         self.assertIn("border-radius: 0 0 16px 16px;", capsule_hover.group(1))
+
+        # FEAT-008: Configurable Notch styles (obsidian, glass, pill)
+        notch_obsidian = re.search(r"\.dpi-notch-obsidian\.dpi-theme-dark\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(notch_obsidian)
+        self.assertIn("#0b0c12", notch_obsidian.group(1))
+
+        notch_glass = re.search(r"\.dpi-notch-glass\.dpi-theme-dark\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(notch_glass)
+        self.assertIn("rgba(24, 26, 38, 0.58)", notch_glass.group(1))
+
+        notch_pill = re.search(r"\.dpi-notch-pill\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(notch_pill)
+        self.assertIn("border-radius: 999px;", notch_pill.group(1))
 
         # UX-017: Animated LiquidGlass Tooltip
         glass_tooltip = re.search(r"\.dpi-glass-tooltip\s*\{([^}]+)\}", css)

@@ -441,6 +441,18 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: remoção das asserções de `_peekActor` e validação do True Apple Phone Notch e tooltips animados.
 - **Validação**: 50/50 testes aprovados, applet recarregado em 825ms com zero erros no `~/.xsession-errors`.
 
+### `FEAT-008` — Seletor de Estilo do Notch: Obsidian Padrão, Clear Glass e Pílula Flutuante (`2026-11-20`)
+- **Severidade**: Nova Feature de Customização Visual.
+- **Causa & Racional Técnico**:
+  - Usuários possuem preferências distintas de acabamento para a Ilha Dinâmica na TopBar: alguns preferem o visual sólido e nítido de Notch de telefone (`Obsidian`), outros apreciam a estética translúcida do LiquidGlass (`Clear Glass`), e outros ainda o formato clássico flutuante (`Pílula`).
+  - Para atender a todos os perfis com persistência confiável, foi introduzida a configuração `notch_style` em `settings.json` com aplicação em tempo real no applet e controle via CLI.
+- **Arquivos Modificados**:
+  - `src/dpi_core/cli.py` & `bin/dpi-hub`: adição de `notch_style: "obsidian"` em `DEFAULT_SETTINGS` e nova flag `--set-notch-style` com validação de `choices=[\"obsidian\", \"glass\", \"pill\"]`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: classes `.dpi-notch-obsidian`, `.dpi-notch-glass` e `.dpi-notch-pill` para temas escuro e claro, com transições suaves e expansão orgânica.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: constante `NOTCH_STYLE_OPTIONS`, método `_applyNotchStyle()` e seção `ESTILO DO NOTCH` com chips interativos na coluna direita da aba `Ajustes`.
+  - `tests/test_cli_and_applet.py`: testes unitários para a flag CLI, persistência, métodos de UI e integridade CSS.
+- **Validação**: 50/50 testes aprovados, reload no Cinnamon em 334ms e troca de estilo em tempo real verificada ao vivo.
+
 ---
 
 ## 5. Procedimentos de Rollback

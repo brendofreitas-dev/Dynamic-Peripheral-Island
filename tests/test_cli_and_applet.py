@@ -413,6 +413,16 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_makeDeviceIcon(", src)
         self.assertIn('this.set_applet_tooltip("")', src)
 
+        # UX-009: Header deduplication in Popover
+        self.assertIn('text: "Antigravity View Usage"', src)
+        self.assertIn('text: "Dynamic Island"', src)
+        self.assertIn("Agente Ativo:", src)
+
+        # UX-010: Antigravity VU 2-column wide layout without scrollbar
+        self.assertIn("_syncPopoverWidth()", src)
+        self.assertIn("dpi-popover-wide", src)
+        self.assertIn("this._scrollView.vscrollbar_policy = St.PolicyType.NEVER", src)
+
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
             if "spacing:" in line:
@@ -448,6 +458,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-left-slot",
             ".dpi-capsule-hovered",
             ".dpi-capsule-open",
+            ".dpi-popover-wide",
         ):
             self.assertIn(required_cls, css)
 
@@ -605,6 +616,97 @@ class TestAppletCssAndDocs(unittest.TestCase):
             gp_dual = {p["key"]: p for p in data_dual["capsule"]["peripherals"]}
             self.assertTrue(gp_dual["gamepad"]["visible"])
             self.assertEqual(gp_dual["gamepad"]["status_text"], "2x")
+
+            # BUG-006: Headset in standby (active=False) -> visible=False on TopBar
+            hw_headset = _mock_hw_manager()
+            hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"] = {
+                "id": "havit_fuxi_h3",
+                "name": "Havit Fuxi H3",
+                "connected": True,
+                "active": False,
+                "charging": False,
+                "battery": None,
+                "connection_type": "2.4GHz",
+                "volume": 100,
+                "muted": False,
+                "sink_state": "SUSPENDED",
+            }
+            buf_hs_off = io.StringIO()
+            with contextlib.redirect_stdout(buf_hs_off):
+                rc_hs_off = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_hs_off, 0)
+            data_hs_off = json.loads(buf_hs_off.getvalue())
+            hs_periph_off = {p["key"]: p for p in data_hs_off["capsule"]["peripherals"]}["headset"]
+            self.assertFalse(hs_periph_off["visible"])
+            self.assertEqual(hs_periph_off["status_text"], "Standby")
+
+            buf_wb_off = io.StringIO()
+            with contextlib.redirect_stdout(buf_wb_off):
+                cli.main(
+                    argv=["--waybar"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            wb_off = json.loads(buf_wb_off.getvalue())
+            self.assertIn("Havit Fuxi H3 (2.4GHz) — Standby", wb_off["tooltip"])
+
+            # FEAT-002: Headset in Bluetooth mode with battery + volume
+            hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"] = {
+                "id": "havit_fuxi_h3",
+                "name": "Havit Fuxi H3",
+                "connected": True,
+                "active": True,
+                "charging": False,
+                "battery": 85,
+                "connection_type": "Bluetooth",
+                "volume": 70,
+                "muted": False,
+                "sink_state": "RUNNING",
+            }
+            buf_hs_bt = io.StringIO()
+            with contextlib.redirect_stdout(buf_hs_bt):
+                rc_hs_bt = cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            self.assertEqual(rc_hs_bt, 0)
+            data_hs_bt = json.loads(buf_hs_bt.getvalue())
+            hs_periph_bt = {p["key"]: p for p in data_hs_bt["capsule"]["peripherals"]}["headset"]
+            self.assertTrue(hs_periph_bt["visible"])
+            self.assertEqual(hs_periph_bt["status_text"], "85% · Vol 70%")
+
+            buf_wb_bt = io.StringIO()
+            with contextlib.redirect_stdout(buf_wb_bt):
+                cli.main(
+                    argv=["--waybar"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            wb_bt = json.loads(buf_wb_bt.getvalue())
+            self.assertIn("Havit Fuxi H3 (Bluetooth) — Bateria: 85% | Volume: 70%", wb_bt["tooltip"])
+
+            # Bluetooth with Muted
+            hw_headset.get_all_peripherals_snapshot.return_value["devices"]["headset"]["muted"] = True
+            buf_hs_mute = io.StringIO()
+            with contextlib.redirect_stdout(buf_hs_mute):
+                cli.main(
+                    argv=["--island-json"],
+                    hw_manager=hw_headset,
+                    ag_collector=_mock_ag_collector(),
+                    settings_path=settings_path,
+                )
+            data_hs_mute = json.loads(buf_hs_mute.getvalue())
+            hs_periph_mute = {p["key"]: p for p in data_hs_mute["capsule"]["peripherals"]}["headset"]
+            self.assertEqual(hs_periph_mute["status_text"], "85% · Mudo")
 
     def test_install_and_uninstall_scripts_syntax(self) -> None:
         for script_name in ("install.sh", "uninstall.sh"):

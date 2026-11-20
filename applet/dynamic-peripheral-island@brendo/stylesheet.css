@@ -328,6 +328,10 @@
     spacing: 10px;
 }
 
+.dpi-popover-root.dpi-popover-wide {
+    width: 680px;
+}
+
 .dpi-popover-root.dpi-theme-dark {
     background-color: transparent;
     border: none;

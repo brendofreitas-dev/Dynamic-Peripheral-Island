@@ -872,6 +872,17 @@ class FuxiHeadsetDriver:
         m = re.search(r"Battery Percentage:\s*0x[0-9a-fA-F]+\s*\((\d+)\)", out)
         if m:
             battery = max(0, min(100, int(m.group(1))))
+        else:
+            m_hex = re.search(r"Battery Percentage:\s*0x([0-9a-fA-F]+)", out)
+            if m_hex:
+                try:
+                    battery = max(0, min(100, int(m_hex.group(1), 16)))
+                except ValueError:
+                    pass
+            if battery is None:
+                m_dec = re.search(r"Battery Percentage:\s*(\d+)", out)
+                if m_dec:
+                    battery = max(0, min(100, int(m_dec.group(1))))
         return connected, battery
 
     def _check_upower_battery(self) -> Tuple[Optional[int], bool]:
@@ -978,12 +989,13 @@ class FuxiHeadsetDriver:
         bt_connected: bool,
     ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
         mac_under = self.bt_mac.lower().replace(":", "_")
+        mac_colon = self.bt_mac.lower()
         cards = self._parse_pactl_cards()
         sinks = self._parse_pactl_sinks()
 
         def _is_bt(item: Dict[str, Any]) -> bool:
             low = (item["name"] + " " + item["raw"]).lower()
-            return ("bluez" in low) and (mac_under in low or "fuxi" in low)
+            return ("bluez" in low) and (mac_under in low or mac_colon in low or "fuxi" in low)
 
         def _is_usb(item: Dict[str, Any]) -> bool:
             low = (item["name"] + " " + item["raw"]).lower()
@@ -1035,6 +1047,7 @@ class FuxiHeadsetDriver:
         if rc != 0 or not out:
             return None
         mac_under = self.bt_mac.lower().replace(":", "_")
+        mac_colon = self.bt_mac.lower()
         usb_src = None
         bt_src = None
         for line in out.splitlines():
@@ -1045,7 +1058,7 @@ class FuxiHeadsetDriver:
             if name.endswith(".monitor"):
                 continue
             low = name.lower()
-            if "bluez" in low and (mac_under in low or "fuxi" in low):
+            if "bluez" in low and (mac_under in low or mac_colon in low or "fuxi" in low):
                 bt_src = name
             elif "fuxi" in low or "xiisound" in low:
                 usb_src = name
@@ -1061,15 +1074,22 @@ class FuxiHeadsetDriver:
         if not usb_present and card and "bluez" not in card["name"].lower():
             usb_present = True
 
+        sink_state = sink["state"].upper() if sink else "DISCONNECTED"
+
         if bt_connected:
             connection_type = "Bluetooth"
             connected = True
+            active = True
         elif usb_present or sink is not None:
             connection_type = "2.4GHz"
             connected = True
+            # BUG-006: when dongle is plugged in but 2.4GHz headset is turned off,
+            # PipeWire reports the sink as SUSPENDED (or sink is absent/inactive).
+            active = (sink is not None) and (sink_state in ("RUNNING", "IDLE"))
         else:
             connection_type = "Disconnected"
             connected = False
+            active = False
 
         battery: Optional[int] = bt_battery
         charging = False
@@ -1086,7 +1106,6 @@ class FuxiHeadsetDriver:
 
         alsa_zero_bug = self._check_alsa_zero_bug() if (usb_present and not bt_connected) else False
         sidetone_active = self._is_sidetone_running(persisted.get("sidetone_pid"))
-        active = connected and (sink is not None or bt_connected)
 
         return {
             "id": "havit_fuxi_h3",
@@ -1098,6 +1117,7 @@ class FuxiHeadsetDriver:
             "connection_type": connection_type,
             "volume": sink["volume"] if sink else 0,
             "muted": sink["muted"] if sink else False,
+            "sink_state": sink_state,
             "active_profile": card["active_profile"] if card else None,
             "available_profiles": card["profiles"] if card else [],
             "sidetone": sidetone_active,

@@ -5,6 +5,22 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.7] - 2026-11-20
+
+### Corrigido
+- **BUG-006 (Ocultação Automática do Headset Desligado na TopBar)**:
+  - `FuxiHeadsetDriver` (`src/dpi_core/hardware.py`): no modo 2.4GHz com o dongle USB plugado, o headset desligado no botão físico mantinha o sink ALSA/PipeWire criado. Agora o driver inspeciona o estado do sink (`sink_state == "SUSPENDED"` ou perfil `"off"`), marcando `active = False` quando o headset está inativo e preservando `connected = True` apenas no Popover (evitando poluição na TopBar).
+
+### Adicionado
+- **FEAT-002 (Telemetria de Bateria e Controles BlueZ para o Havit Fuxi H3)**:
+  - `FuxiHeadsetDriver` (`src/dpi_core/hardware.py`): suporte completo ao modo Bluetooth (`01:92:25:27:09:76`), com decodificação de percentual de bateria hexadecimal via `bluetoothctl` e `upower`, seleção automática do sink BlueZ (`bluez_output.*`), e controle de volume/mudo.
+  - `src/dpi_core/cli.py`: exibição combinada de bateria e volume na TopBar (`85% · Vol 70%` ou `85% · Mudo`) e tooltips informativos sem emojis.
+- **UX-009 (Deduplicação do Header no Popover Bento Grid)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: consolidação do cabeçalho superior unificado exibindo `Dynamic Island · Antigravity View Usage [Pro]` e o indicador `Agente Ativo: <modelo>` uma única vez, eliminando o card de boas-vindas redundante dentro da aba Antigravity.
+- **UX-010 (Aba Antigravity VU em Bento Grid 2 Colunas sem Scrollbar)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js` e `stylesheet.css`: redesenhada a aba Antigravity VU em layout de duas colunas paralelas (Cotas e Pace Marker à esquerda; Sessão Ativa, Swarm e Histograma 7 dias à direita).
+  - Expansão dinâmica de largura para 680px (`.dpi-popover-wide`) com centralização automática abaixo da ilha e desativação de rolagem vertical (`vscrollbar_policy = NEVER`), retornando à largura compacta padrão (452px) nas outras abas.
+
 ## [1.0.6] - 2026-11-19
 
 ### Adicionado

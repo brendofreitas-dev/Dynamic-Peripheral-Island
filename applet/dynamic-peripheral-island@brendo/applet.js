@@ -1251,12 +1251,25 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     if (m.current_dpi) tooltipText += " · " + m.current_dpi + " DPI";
                     else if (m.dpi) tooltipText += " · " + m.dpi + " DPI";
                 } else if (p.key === "headset") {
+                    if (!p.active) continue;
                     let h = peripherals.headset || {};
                     let conn = h.connection_type || p.connection_type || "2.4GHz";
-                    tooltipText = (h.name || "Havit Fuxi H3") + " · " + conn;
+                    let isBt = conn === "Bluetooth" || p.connection_type === "Bluetooth";
                     let bat = (p.battery !== null && p.battery !== undefined) ? p.battery : h.battery;
-                    if (bat !== null && bat !== undefined) tooltipText += " · Bateria " + bat + "%";
-                    if (h.volume !== null && h.volume !== undefined) tooltipText += " · Vol " + h.volume + "%";
+                    let vol = (p.volume !== null && p.volume !== undefined) ? p.volume : h.volume;
+                    let isMuted = p.muted !== undefined ? p.muted : Boolean(h.muted);
+                    let volStr = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? "Vol " + vol + "%" : "Vol 100%");
+
+                    if (isBt && bat !== null && bat !== undefined) {
+                        text = bat + "% · " + volStr;
+                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                    } else if (isBt) {
+                        text = "BT · " + volStr;
+                        tooltipText = "Havit Fuxi H3 (Bluetooth) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                    } else {
+                        text = "2.4GHz · " + volStr;
+                        tooltipText = "Havit Fuxi H3 (2.4GHz) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "100%"));
+                    }
                 } else if (p.key === "gamepad") {
                     let g = peripherals.gamepad || {};
                     let ctrls = Array.isArray(g.controllers) ? g.controllers : [];
@@ -1292,16 +1305,26 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             }
 
             let headset = peripherals.headset || {};
-            let showHeadset = Boolean(settings.pin_headset) || Boolean(headset.connected && headset.active);
+            let showHeadset = Boolean(headset.connected && headset.active);
             if (showHeadset) {
                 let bat = headset.battery;
-                let text = headset.connected
-                    ? (bat !== null && bat !== undefined ? bat + "%" : (headset.connection_type === "2.4GHz" ? "2.4GHz" : "BT"))
-                    : "OFF";
-                let tone = !headset.connected ? "muted" : (headset.alsa_zero_bug ? "warn" : pctSeverityClass(bat, threshold));
-                let tip = (headset.name || "Havit Fuxi H3") + " · " + (headset.connection_type || "2.4GHz");
-                if (bat !== null && bat !== undefined) tip += " · Bateria " + bat + "%";
-                if (headset.volume !== null && headset.volume !== undefined) tip += " · Vol " + headset.volume + "%";
+                let vol = headset.volume;
+                let isMuted = Boolean(headset.muted);
+                let isBt = headset.connection_type === "Bluetooth";
+                let volStr = isMuted ? "Mudo" : (vol !== null && vol !== undefined ? "Vol " + vol + "%" : "Vol 100%");
+                let text = "";
+                let tip = "";
+                if (isBt && bat !== null && bat !== undefined) {
+                    text = bat + "% · " + volStr;
+                    tip = "Havit Fuxi H3 (Bluetooth) — Bateria: " + bat + "% | Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                } else if (isBt) {
+                    text = "BT · " + volStr;
+                    tip = "Havit Fuxi H3 (Bluetooth) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "--"));
+                } else {
+                    text = "2.4GHz · " + volStr;
+                    tip = "Havit Fuxi H3 (2.4GHz) — Volume: " + (isMuted ? "Mudo" : (vol !== null ? vol + "%" : "100%"));
+                }
+                let tone = isMuted ? "warn" : (bat !== null && bat !== undefined ? pctSeverityClass(bat, threshold) : "info");
                 this._segPeripherals.add_child(this._makePillItem("audio-headphones-symbolic", text, tone, null, tip));
                 pillCount++;
             }
@@ -1505,11 +1528,27 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
     _renderPopover() {
         if (!this._popoverRoot) return;
         this._applyTheme();
+        this._syncPopoverWidth();
         this._renderHeader();
         this._renderTabBar();
         this._renderToastBanner();
         this._renderActiveTabBody();
         this._justExpandedCard = null;
+    }
+
+    _syncPopoverWidth() {
+        if (!this._popoverRoot) return;
+        if (this._activeTab === "antigravity") {
+            this._popoverRoot.add_style_class_name("dpi-popover-wide");
+            if (this._scrollView) {
+                this._scrollView.vscrollbar_policy = St.PolicyType.NEVER;
+            }
+        } else {
+            this._popoverRoot.remove_style_class_name("dpi-popover-wide");
+            if (this._scrollView) {
+                this._scrollView.vscrollbar_policy = St.PolicyType.AUTOMATIC;
+            }
+        }
     }
 
     _renderActiveTabBody() {
@@ -1533,9 +1572,25 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         this._activeTab = newTabId;
         this._justExpandedCard = null;
+        this._syncPopoverWidth();
         this._syncSegmentHighlight();
         this._renderTabBar();
         this._renderActiveTabBody();
+
+        if (typeof this.menu._reposition === "function") {
+            try {
+                this.menu._reposition();
+            } catch (e) {
+                // ignore
+            }
+        } else if (typeof this.menu._calculatePosition === "function") {
+            try {
+                let [xPos, yPos] = this.menu._calculatePosition();
+                this.menu.actor.set_position(xPos, yPos);
+            } catch (e) {
+                // ignore
+            }
+        }
 
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
@@ -1566,8 +1621,9 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._headerBox.destroy_all_children();
 
         let ag = (this._data && this._data.antigravity) || {};
-        let planName = this._extractPlanName(ag.plan);
-        let activeModel = this._extractActiveModelName(ag.active_model);
+        let planName = this._extractPlanName(ag.plan) || (ag.connected ? "Pro" : null);
+        let activeModel = this._extractActiveModelName(ag.active_model) || (ag.connected ? "Orchestrator (Argon)" : null);
+        let creditsStr = this._extractPlanCredits(ag.plan);
 
         let leftCol = new St.BoxLayout({ vertical: true, x_expand: true });
         let titleRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
@@ -1581,17 +1637,29 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             style_class: "dpi-title",
             y_align: Clutter.ActorAlign.CENTER,
         }));
+        titleRow.add_child(new St.Label({
+            text: "·",
+            style_class: "dpi-subtitle",
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        titleRow.add_child(new St.Label({
+            text: "Antigravity View Usage",
+            style_class: "dpi-title",
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
         if (planName) {
             titleRow.add_child(this._makeBadge(planName, "purple"));
         }
+        if (creditsStr) {
+            titleRow.add_child(this._makeBadge(creditsStr, "info"));
+        }
         leftCol.add_child(titleRow);
 
-        if (activeModel) {
-            leftCol.add_child(new St.Label({
-                text: activeModel,
-                style_class: "dpi-subtitle",
-            }));
-        }
+        let subtitleText = activeModel ? "Agente Ativo: " + activeModel : "Daemon Antigravity";
+        leftCol.add_child(new St.Label({
+            text: subtitleText,
+            style_class: "dpi-subtitle",
+        }));
         this._headerBox.add_child(leftCol);
 
         // Refresh button
@@ -2142,43 +2210,11 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let settings = (this._data && this._data.settings) || {};
         let pinnedQuota = settings.pinned_quota || "auto";
 
-        // 1. Hero Header: Plan, Credits, Active Model
-        let hero = new St.BoxLayout({ vertical: true, style_class: "dpi-hero-box", x_expand: true });
-        let topRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
-        topRow.add_child(new St.Icon({
-            icon_name: "applications-science-symbolic",
-            icon_type: St.IconType.SYMBOLIC,
-            icon_size: 15,
-        }));
-        topRow.add_child(new St.Label({
-            text: "Antigravity View Usage",
-            style_class: "dpi-card-title",
-            x_expand: true,
-        }));
+        // 2-Column Bento Grid: Left Column (Quotas) | Right Column (Session & Swarm, Histogram & Monthly)
+        let grid = new St.BoxLayout({ style: "spacing: 10px;", x_expand: true });
 
-        let planName = this._extractPlanName(ag.plan) || (ag.connected ? "Connected" : "Offline");
-        topRow.add_child(this._makeBadge(planName, ag.connected ? "purple" : "muted"));
-        hero.add_child(topRow);
-
-        let modelName = this._extractActiveModelName(ag.active_model) || "Modelo nao detectado";
-        let creditsStr = this._extractPlanCredits(ag.plan);
-        let modelRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
-        modelRow.add_child(new St.Label({
-            text: "Modelo Ativo:",
-            style_class: "dpi-subtitle",
-        }));
-        modelRow.add_child(new St.Label({
-            text: modelName,
-            style_class: "dpi-card-metric",
-            x_expand: true,
-        }));
-        if (creditsStr) {
-            modelRow.add_child(this._makeBadge(creditsStr, "info"));
-        }
-        hero.add_child(modelRow);
-        this._bodyStack.add_child(hero);
-
-        // 2. Quota Cards with Pace Marker & Pin-to-TopBar
+        // Left Column: Quota cards
+        let leftCol = new St.BoxLayout({ vertical: true, style: "spacing: 8px;", x_expand: true });
         let quotas = Array.isArray(ag.quotas) ? ag.quotas : [];
         if (quotas.length === 0) {
             let emptyCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
@@ -2188,18 +2224,21 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     : "Daemon Antigravity offline ou inacessivel no momento.",
                 style_class: "dpi-subtitle",
             }));
-            this._bodyStack.add_child(emptyCard);
+            leftCol.add_child(emptyCard);
         } else {
             for (let q of quotas) {
-                this._bodyStack.add_child(this._buildQuotaCard(q, pinnedQuota));
+                leftCol.add_child(this._buildQuotaCard(q, pinnedQuota));
             }
         }
+        grid.add_child(leftCol);
 
-        // 3. Active Session & Swarm Card
-        this._bodyStack.add_child(this._buildSwarmSessionCard(ag));
+        // Right Column: Session & Swarm + 7-Day Histogram & Monthly Summary
+        let rightCol = new St.BoxLayout({ vertical: true, style: "spacing: 8px;", x_expand: true });
+        rightCol.add_child(this._buildSwarmSessionCard(ag));
+        rightCol.add_child(this._buildHistogramMonthlyCard(ag));
+        grid.add_child(rightCol);
 
-        // 4. 7-Day Histogram & Monthly Summary Card
-        this._bodyStack.add_child(this._buildHistogramMonthlyCard(ag));
+        this._bodyStack.add_child(grid);
     }
 
     _buildQuotaCard(q, pinnedQuotaId) {
@@ -2251,7 +2290,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         // Progress bar + vertical Pace Marker (pace_pct is elapsed % of window; expected remaining = 100 - pace_pct)
         let remainingPaceMarker = (enabled && pace !== null && pace > 0) ? clamp(100 - pace, 0, 100) : null;
-        card.add_child(this._makeProgressBar(rem, tone, remainingPaceMarker));
+        card.add_child(this._makeProgressBar(rem, tone, remainingPaceMarker, 290));
 
         // Meta row: reset countdown + depletion ETA
         let metaRow = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
@@ -2641,20 +2680,21 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         });
     }
 
-    _makeProgressBar(percent, tone, pacePercent) {
+    _makeProgressBar(percent, tone, pacePercent, customWidth) {
+        let barWidth = customWidth || PROGRESS_TRACK_WIDTH;
         let pct = clamp(Number(percent) || 0, 0, 100);
-        let fillW = Math.round((pct / 100) * PROGRESS_TRACK_WIDTH);
+        let fillW = Math.round((pct / 100) * barWidth);
 
         let container = new St.Widget({
             layout_manager: new Clutter.FixedLayout(),
-            width: PROGRESS_TRACK_WIDTH,
+            width: barWidth,
             height: 11,
             x_expand: false,
         });
 
         let track = new St.Widget({
             style_class: "dpi-bar-track",
-            width: PROGRESS_TRACK_WIDTH,
+            width: barWidth,
             height: 7,
         });
         track.set_position(0, 2);
@@ -2673,7 +2713,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (pacePercent !== null && pacePercent !== undefined && !isNaN(pacePercent)) {
             // Pace marker represents expected remaining budget along the window (100 - elapsed_pct)
             // or direct pace position if provided as remaining-space pace.
-            let markerX = clamp(Math.round((Number(pacePercent) / 100) * PROGRESS_TRACK_WIDTH), 2, PROGRESS_TRACK_WIDTH - 4);
+            let markerX = clamp(Math.round((Number(pacePercent) / 100) * barWidth), 2, barWidth - 4);
             let marker = new St.Widget({
                 style_class: "dpi-pace-marker",
                 width: 2,

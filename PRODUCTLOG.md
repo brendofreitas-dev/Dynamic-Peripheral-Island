@@ -220,6 +220,42 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: testes cobrindo a presença do monitor `_calHoverTimerId`, `global.get_pointer` e `_pointInActor`.
 - **Validação**: Verificação em runtime no Cinnamon Desktop com transição imediata e sem travamentos ao deslizar o mouse entre o Calendário e os segmentos da ilha.
 
+### `BUG-006` — Headset Havit Fuxi H3 Desligado Aparecendo na TopBar (`2026-11-20`)
+- **Severidade**: Média (poluição visual na TopBar quando o periférico está inativo).
+- **Causa Raiz**:
+  - No modo sem fio 2.4GHz, o dongle USB (`040b:0897`) permanece fisicamente plugado ao computador, fazendo com que o driver USB Audio do kernel e o PipeWire mantenham o nó de saída (sink) registrado indefinidamente, atribuindo `connected = True` e `active = True` mesmo com o headset desligado na chave física.
+- **Arquivos Modificados**:
+  - `src/dpi_core/hardware.py`: aprimoramento de `FuxiHeadsetDriver.read_state()` para checar o estado operacional do sink PipeWire (`sink_state`) e perfil ALSA (`active_profile`); quando o estado for `SUSPENDED` ou perfil `off`, define `active = False` mantendo `connected = True`.
+  - `src/dpi_core/cli.py`: o headset só é marcado como `visible = True` na TopBar quando `active == True` (ou `pinned == True`), ocultando-o automaticamente ao ser desligado.
+  - `tests/test_hardware.py` e `tests/test_cli_and_applet.py`: testes unitários adicionados para validar a transição `SUSPENDED` -> `active=False` / `visible=False`.
+- **Validação**: 34/34 testes aprovados e headset saindo da TopBar em repouso no Cinnamon.
+
+### `FEAT-002` — Telemetria de Bateria e Controles BlueZ para o Havit Fuxi H3 em Modo Bluetooth (`2026-11-20`)
+- **Severidade**: Melhoria de Funcionalidade (paridade de recursos no modo Bluetooth).
+- **Causa & Racional Técnico**:
+  - Quando conectado via Bluetooth (`01:92:25:27:09:76`), o headset expõe telemetria de bateria via serviço BlueZ Battery1 e sink de áudio `bluez_output.*`. Era necessário unificar a leitura de bateria, controle de volume e mute no backend e na UI.
+- **Arquivos Modificados**:
+  - `src/dpi_core/hardware.py`: leitura robusta de bateria hexadecimal (`0xNN (DD)`) via `bluetoothctl info` e `upower`, seleção automática do card e sink BlueZ em `_match_fuxi_card_and_sink(bt_connected=True)`, com despacho de `set_volume` e `toggle_mute` diretamente no sink BlueZ ativo.
+  - `src/dpi_core/cli.py`: formatação combinada na TopBar (`NN% · Vol VV%` ou `NN% · Mudo`) e tooltips contextuais.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: suporte a exibição de bateria na pílula da TopBar e card detalhado no Popover.
+- **Validação**: Testes unitários cobrindo decodificação hexadecimal e controle de volume via mock BlueZ aprovados com 100% de sucesso.
+
+### `UX-009` — Deduplicação do Header no Popover Bento Grid (`2026-11-20`)
+- **Severidade**: Baixa (limpeza e organização visual da interface).
+- **Causa Raiz**:
+  - O topo do Popover exibia `Dynamic Island [Pro]` + modelo ativo, e ao abrir a aba `Antigravity VU` havia um card interno repetindo `Antigravity View Usage [Pro]` e `Modelo Ativo: <modelo>`, desperdiçando espaço vertical valioso.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: consolidação do cabeçalho unificado com o título do hub, badge de plano `Pro` e rótulo estilizado `Agente Ativo: <modelo>` uma única vez; remoção do card de cabeçalho redundante dentro de `_renderAntigravityTab()`.
+- **Validação**: Interface limpa e sem redundâncias em todas as 3 abas.
+
+### `UX-010` — Aba Antigravity VU em Bento Grid de 2 Colunas sem Scrollbar (`2026-11-20`)
+- **Severidade**: Média (otimização de layout para visualização completa de telemetria de IA sem rolagem).
+- **Causa Raiz**:
+  - Na largura padrão de 452px, todos os blocos de telemetria do Antigravity (Cotas, Sessão, Tokens, Swarm e Histograma) ficavam empilhados verticalmente, exigindo rolagem contínua para acompanhar o consumo e o histórico.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js` e `stylesheet.css`: reorganização da aba em Bento Grid de duas colunas paralelas (`_colLeft` com Cotas de Modelos e Pace Marker; `_colRight` com Sessão Ativa, Tokens, Swarm Tracker e Histograma de 7 dias + Resumo Mensal); aplicação dinâmica da classe `.dpi-popover-wide` (680px) com política `vscrollbar_policy = NEVER` na aba Antigravity, restaurando a largura compacta (452px) e scroll automático nas demais abas.
+- **Validação**: Testes automatizados e inspeção no Cinnamon confirmando visualização simultânea de todas as métricas sem barra de rolagem.
+
 ---
 
 ## 5. Procedimentos de Rollback

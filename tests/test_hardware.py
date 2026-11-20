@@ -510,6 +510,143 @@ class TestFuxiHeadsetDriver(unittest.TestCase):
             self.assertEqual(drv.read_state()["eq_preset"], "gaming")
             self.assertTrue((root / "state" / "fuxi_eq.conf").exists())
 
+    def test_24ghz_mode_suspended_vs_running_activity_bug_006(self) -> None:
+        """BUG-006: Headset 2.4GHz with dongle plugged in must be active=False when sink is SUSPENDED."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            hidraw_root = root / "hidraw"
+            _make_fake_hidraw_node(hidraw_root, "hidraw3", "040b", "0897", hid_name="Fuxi-H3 Dongle")
+
+            def make_fake_run(sink_state="SUSPENDED", active_profile="output:analog-stereo+input:mono-fallback"):
+                def fake_run(cmd, timeout=2.5):
+                    if cmd[:2] == ["bluetoothctl", "info"]:
+                        return (0, "Connected: no\n", "")
+                    if cmd[:3] == ["upower", "-d"]:
+                        return (0, "", "")
+                    if cmd[:3] == ["pactl", "list", "cards"]:
+                        return (
+                            0,
+                            "Card #12\n"
+                            "\tName: alsa_card.usb-XiiSound_Fuxi-H3-00\n"
+                            f"\tActive Profile: {active_profile}\n",
+                            "",
+                        )
+                    if cmd[:3] == ["pactl", "list", "sinks"]:
+                        if active_profile == "off":
+                            return (0, "", "")
+                        return (
+                            0,
+                            "Sink #12\n"
+                            f"\tState: {sink_state}\n"
+                            "\tName: alsa_output.usb-XiiSound_Fuxi-H3-00.analog-stereo\n"
+                            "\tMute: no\n"
+                            "\tVolume: front-left: 65536 / 100% / 0.00 dB\n",
+                            "",
+                        )
+                    if cmd == ["amixer", "-c", "FuxiH3", "cget", "numid=9"]:
+                        return (0, "values=100,100\n", "")
+                    if cmd == ["amixer", "-c", "FuxiH3", "cget", "numid=7"]:
+                        return (0, "values=on\n", "")
+                    return (1, "", "unhandled")
+                return fake_run
+
+            # 1. Headset turned off: PipeWire reports SUSPENDED -> connected=True, active=False
+            drv_off = FuxiHeadsetDriver(
+                state_dir=root / "state",
+                hidraw_root=hidraw_root,
+                cmd_runner=make_fake_run(sink_state="SUSPENDED"),
+            )
+            s_off = drv_off.read_state()
+            self.assertTrue(s_off["connected"])
+            self.assertFalse(s_off["active"])
+            self.assertEqual(s_off["sink_state"], "SUSPENDED")
+            self.assertEqual(s_off["connection_type"], "2.4GHz")
+
+            # 2. Headset turned on: sink is RUNNING -> connected=True, active=True
+            drv_on = FuxiHeadsetDriver(
+                state_dir=root / "state",
+                hidraw_root=hidraw_root,
+                cmd_runner=make_fake_run(sink_state="RUNNING"),
+            )
+            s_on = drv_on.read_state()
+            self.assertTrue(s_on["connected"])
+            self.assertTrue(s_on["active"])
+            self.assertEqual(s_on["sink_state"], "RUNNING")
+
+            # 3. Card profile off -> active=False
+            drv_prof_off = FuxiHeadsetDriver(
+                state_dir=root / "state",
+                hidraw_root=hidraw_root,
+                cmd_runner=make_fake_run(sink_state="IDLE", active_profile="off"),
+            )
+            s_prof_off = drv_prof_off.read_state()
+            self.assertTrue(s_prof_off["connected"])
+            self.assertFalse(s_prof_off["active"])
+
+    def test_bluetooth_battery_hex_and_volume_controls_feat_002(self) -> None:
+        """FEAT-002: Fuxi H3 in Bluetooth mode with hex battery (0x55 -> 85%) and BlueZ controls."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pactl_calls = []
+
+            def fake_run(cmd, timeout=2.5):
+                pactl_calls.append(cmd)
+                if cmd[:2] == ["bluetoothctl", "info"]:
+                    return (
+                        0,
+                        "Device 01:92:25:27:09:76 (public)\n"
+                        "\tName: FUXI-H3\n"
+                        "\tAlias: FUXI-H3\n"
+                        "\tConnected: yes\n"
+                        "\tBattery Percentage: 0x55 (85)\n",
+                        "",
+                    )
+                if cmd[:3] == ["upower", "-d"]:
+                    return (0, "", "")
+                if cmd[:3] == ["pactl", "list", "cards"]:
+                    return (
+                        0,
+                        "Card #55\n"
+                        "\tName: bluez_card.01_92_25_27_09_76\n"
+                        "\tActive Profile: a2dp-sink\n",
+                        "",
+                    )
+                if cmd[:3] == ["pactl", "list", "sinks"]:
+                    return (
+                        0,
+                        "Sink #99\n"
+                        "\tState: RUNNING\n"
+                        "\tName: bluez_output.01_92_25_27_09_76.a2dp-sink\n"
+                        "\tMute: no\n"
+                        "\tVolume: front-left: 52428 /  80% / -5.80 dB,   front-right: 52428 /  80% / -5.80 dB\n",
+                        "",
+                    )
+                if cmd[:2] == ["pactl", "set-sink-volume"] or cmd[:2] == ["pactl", "set-sink-mute"]:
+                    return (0, "", "")
+                return (1, "", "unhandled")
+
+            drv = FuxiHeadsetDriver(
+                state_dir=root / "state",
+                cmd_runner=fake_run,
+            )
+            state = drv.read_state()
+            self.assertTrue(state["connected"])
+            self.assertTrue(state["active"])
+            self.assertEqual(state["connection_type"], "Bluetooth")
+            self.assertEqual(state["battery"], 85)
+            self.assertEqual(state["volume"], 80)
+            self.assertFalse(state["muted"])
+            self.assertEqual(state["sink_name"], "bluez_output.01_92_25_27_09_76.a2dp-sink")
+
+            # Test volume and mute controls dispatching to BlueZ sink
+            ok_v, _ = drv.set_volume(85)
+            self.assertTrue(ok_v)
+            self.assertIn(["pactl", "set-sink-volume", "bluez_output.01_92_25_27_09_76.a2dp-sink", "85%"], pactl_calls)
+
+            ok_m, _ = drv.toggle_mute()
+            self.assertTrue(ok_m)
+            self.assertIn(["pactl", "set-sink-mute", "bluez_output.01_92_25_27_09_76.a2dp-sink", "toggle"], pactl_calls)
+
 
 class TestK500KeyboardDriverSafeMode(unittest.TestCase):
     """Tests strict Hardware Safe Mode protections on Machenike K500-B94 (Sino Wealth MCU)."""

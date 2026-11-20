@@ -119,9 +119,7 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
     if key == "mouse":
         visible = pinned or (connected and active) or charging or low_battery
     elif key == "headset":
-        visible = pinned or low_battery or (
-            connected and (active or isinstance(battery, (int, float)) or conn_type == "Bluetooth")
-        )
+        visible = bool(connected and active)
     elif key == "gamepad":
         visible = pinned or active or charging or low_battery
     else:  # keyboard
@@ -139,12 +137,23 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         hz = dev.get("polling_rate") or "--"
         detail_text = f"{dpi} DPI · {hz}Hz"
     elif key == "headset":
-        bat_str = f"{int(battery)}%" if isinstance(battery, (int, float)) else conn_type
-        status_text = f"{int(battery)}%+" if (charging and isinstance(battery, (int, float))) else bat_str
         vol = dev.get("volume")
-        muted = dev.get("muted", False)
-        vol_str = "Mudo" if muted else (f"{int(vol)}%" if isinstance(vol, (int, float)) else "--")
-        detail_text = f"{conn_type} · Vol {vol_str}"
+        muted = bool(dev.get("muted", False))
+        vol_str = "Mudo" if muted else (f"Vol {int(vol)}%" if isinstance(vol, (int, float)) else "Vol --")
+        has_bat = isinstance(battery, (int, float))
+
+        if not active:
+            status_text = "Standby"
+            detail_text = f"{conn_type} · Standby"
+        elif has_bat:
+            base_status = f"{int(battery)}% · {vol_str}"
+            status_text = f"{base_status}+" if charging else base_status
+            bat_lbl = f"{int(battery)}%+" if charging else f"{int(battery)}%"
+            detail_text = f"{conn_type} · Bateria {bat_lbl}"
+        else:
+            base_status = f"{conn_type} · {vol_str}"
+            status_text = f"{base_status}+" if charging else base_status
+            detail_text = conn_type
     elif key == "gamepad":
         controllers = dev.get("controllers") or []
         active_ctrls = [c for c in controllers if c.get("active")]
@@ -181,7 +190,7 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
     elif low_battery:
         level = "warning"
 
-    return {
+    res = {
         "key": key,
         "name": str(dev.get("name") or meta["name"]),
         "short_name": meta["short"],
@@ -197,6 +206,10 @@ def _summarize_device(key: str, dev: Dict[str, Any], settings: Dict[str, Any]) -
         "detail_text": detail_text,
         "level": level,
     }
+    if key == "headset":
+        res["volume"] = dev.get("volume")
+        res["muted"] = bool(dev.get("muted", False))
+    return res
 
 
 def _select_pinned_quota(ag_snap: Dict[str, Any], pinned_id: str) -> Optional[Dict[str, Any]]:
@@ -317,7 +330,22 @@ def format_waybar(payload: Dict[str, Any]) -> str:
 
     tooltip_lines: List[str] = ["Dynamic Peripheral Island", ""]
     for p in capsule.get("peripherals") or []:
-        tooltip_lines.append(f"{p['name']}: {p['status_text']} ({p['detail_text']})")
+        if p.get("key") == "headset":
+            conn = p.get("connection_type") or "2.4GHz"
+            vol = p.get("volume")
+            muted = p.get("muted", False)
+            vol_disp = "Mudo" if muted else (f"Volume: {int(vol)}%" if isinstance(vol, (int, float)) else "Volume: --")
+            bat = p.get("battery")
+            if not p.get("connected"):
+                tooltip_lines.append(f"{p['name']}: Off (Desconectado)")
+            elif not p.get("active"):
+                tooltip_lines.append(f"{p['name']} ({conn}) — Standby")
+            elif isinstance(bat, (int, float)):
+                tooltip_lines.append(f"{p['name']} ({conn}) — Bateria: {int(bat)}% | {vol_disp}")
+            else:
+                tooltip_lines.append(f"{p['name']} ({conn}) — {vol_disp}")
+        else:
+            tooltip_lines.append(f"{p['name']}: {p['status_text']} ({p['detail_text']})")
     tooltip_lines.append("")
     ag = payload.get("antigravity") or {}
     tooltip_lines.append(

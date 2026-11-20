@@ -562,20 +562,14 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("this._bodyStack.opacity = 150;", src)
         self.assertIn("this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 110,", src)
 
-        # FEAT-006 & UX-017: Apple Notch Notchy Peek and Animated LiquidGlass Tooltip
-        self.assertIn("this._peekActor", src)
+        # UX-017 & UX-018: Animated LiquidGlass Tooltip and True Apple Notch TopBar
         self.assertIn("this._tooltipActor", src)
         self.assertIn("_showAnimatedTooltip(sourceActor, text)", src)
         self.assertIn("_hideAnimatedTooltip()", src)
-        self.assertIn("_showNotchPeek()", src)
-        self.assertIn("_hideNotchPeek", src)
-        self.assertIn("Main.uiGroup.remove_actor(this._peekActor)", src)
         self.assertIn("Main.uiGroup.remove_actor(this._tooltipActor)", src)
-        self.assertIn("this._peekActor.destroy()", src)
         self.assertIn("this._tooltipActor.destroy()", src)
-        self.assertIn("this._peekShowTimerId", src)
-        self.assertIn("this._peekHideTimerId", src)
         self.assertIn("this._tooltipTimerId", src)
+        self.assertNotIn("this._peekActor", src)
 
         # Ensure St.BoxLayout never receives a GObject `spacing:` property outside CSS `style:` strings
         for lineno, line in enumerate(src.splitlines(), start=1):
@@ -618,7 +612,6 @@ class TestAppletCssAndDocs(unittest.TestCase):
             ".dpi-ag-columns",
             ".dpi-ag-col-left",
             ".dpi-ag-col-right",
-            ".dpi-notch-peek",
             ".dpi-glass-tooltip",
         ):
             self.assertIn(required_cls, css)
@@ -646,11 +639,18 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIsNotNone(col_right)
         self.assertIn("width: 336px;", col_right.group(1))
 
-        # FEAT-006: Apple Notch TopBar border-radius (0 0 14px 14px) and Notchy Peek (480px)
-        notch_peek = re.search(r"\.dpi-notch-peek\s*\{([^}]+)\}", css)
-        self.assertIsNotNone(notch_peek)
-        self.assertIn("width: 480px;", notch_peek.group(1))
-        self.assertIn("border-radius: 0 0 18px 18px;", notch_peek.group(1))
+        # UX-018: True Apple Phone Notch TopBar (border-radius: 0 0 16px 16px, padding expansion on hover)
+        capsule_block = re.search(r"\.dpi-unified-capsule\s*\{([^}]+)\}", css)
+        self.assertIsNotNone(capsule_block)
+        self.assertIn("border-radius: 0 0 16px 16px;", capsule_block.group(1))
+        self.assertIn("margin-top: 0;", capsule_block.group(1))
+        self.assertIn("padding: 0 12px 1px 12px;", capsule_block.group(1))
+        self.assertIn("transition-duration: 280ms;", capsule_block.group(1))
+
+        capsule_hover = re.search(r"\.dpi-unified-capsule\.dpi-theme-dark\.dpi-capsule-hovered[^{]*\{([^}]+)\}", css)
+        self.assertIsNotNone(capsule_hover)
+        self.assertIn("padding: 0 16px 1px 16px;", capsule_hover.group(1))
+        self.assertIn("border-radius: 0 0 16px 16px;", capsule_hover.group(1))
 
         # UX-017: Animated LiquidGlass Tooltip
         glass_tooltip = re.search(r"\.dpi-glass-tooltip\s*\{([^}]+)\}", css)
@@ -685,26 +685,14 @@ class TestAppletCssAndDocs(unittest.TestCase):
         font_families = re.findall(r"font-family\s*:\s*([^;]+);", css)
         self.assertEqual(len(font_families), 0, msg=f"stylesheet.css should not override font-family: {font_families}")
 
-        # Capsule is transparent in idle (hover-only) and has zero blue background
-        self.assertNotIn("rgba(15, 23, 42, 0.84)", css)
-        capsule_idle = re.search(r"\.dpi-unified-capsule\s*\{([^}]+)\}", css)
-        self.assertIsNotNone(capsule_idle)
-        self.assertIn("background-color: transparent;", capsule_idle.group(1))
-        self.assertIn("border-radius: 0 0 14px 14px;", capsule_idle.group(1))
-        self.assertIn("margin-top: 0;", capsule_idle.group(1))
-        self.assertNotIn("999px", capsule_idle.group(1))
-        self.assertNotIn("rgba(15, 23, 42", capsule_idle.group(1))
-
-        # Both dark and light idle themes for unified capsule must be completely transparent
+        # Dark and light idle themes for unified capsule
         dark_idle = re.search(r"\.dpi-unified-capsule\.dpi-theme-dark\s*\{([^}]+)\}", css)
         self.assertIsNotNone(dark_idle)
-        self.assertIn("background-color: transparent;", dark_idle.group(1))
-        self.assertNotIn("rgba(15, 23, 42", dark_idle.group(1))
+        self.assertIn("rgba(12, 13, 20, 0.94)", dark_idle.group(1))
 
         light_idle = re.search(r"\.dpi-unified-capsule\.dpi-theme-light\s*\{([^}]+)\}", css)
         self.assertIsNotNone(light_idle)
-        self.assertIn("background-color: transparent;", light_idle.group(1))
-        self.assertNotIn("rgba(15, 23, 42", light_idle.group(1))
+        self.assertIn("rgba(248, 250, 252, 0.94)", light_idle.group(1))
 
         # Hovered and open states must exist and be defined for both dark and light
         self.assertIn(".dpi-unified-capsule.dpi-theme-dark.dpi-capsule-hovered", css)

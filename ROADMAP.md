@@ -22,11 +22,10 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 
 ---
 
-## Fase 3 — Apple Notch & Notchy Peek Intermediário (`v1.2.0` — Concluída)
-- [x] **Estética Apple Notch na TopBar (`applet/stylesheet.css`)**: Recorte de ilha colada no topo da tela (`border-radius: 0 0 14px 14px;`), acabamento LiquidGlass translúcido e borda inferior luminosa nos estados ativos e hover.
-- [x] **Estágio Intermediário Notchy Peek (`FEAT-006`)**: Container flutuante de 480px montado em `Main.uiGroup`, proporcionando acesso instantâneo ao mini-player Spotify/Mídia e cota Antigravity após 220ms de hover, com controles de transporte rápidos e botão `Expandir`.
-- [x] **Tooltips Animados LiquidGlass (`UX-017`)**: Tooltips flutuantes suaves em escala e translação multieixo com algoritmo anti-colisão automático com o Notchy Peek.
-- [x] **Popover Bento Grid 700px Unificado (`UX-016`)**: Largura padronizada de 700px em todas as 4 abas e transições aceleradas na GPU a 60 FPS reais sem flash em branco.
+## Fase 3 — True Apple Phone Notch na TopBar & Tooltips Animados (`v1.2.0` / `v1.3.1` — Concluída)
+- [x] **True Apple Phone Notch na TopBar (`applet/stylesheet.css`)**: Geometria autêntica de Notch de telefone colada no topo (`border-radius: 0 0 16px 16px; margin-top: 0;`), acabamento LiquidGlass translúcido, expansão orgânica no hover e abertura imediata do Popover Bento Grid em 1 clique.
+- [x] **Tooltips Animados LiquidGlass (`UX-017`)**: Tooltips flutuantes suaves em escala e translação multieixo posicionados de forma limpa 6px abaixo da TopBar.
+- [x] **Popover Bento Grid 700px Unificado (`UX-016`)**: Largura padronizada de 700px e transições aceleradas na GPU a 60 FPS reais sem flash em branco.
 
 ---
 
@@ -34,7 +33,6 @@ Este documento descreve a evolução planejada do **Dynamic Peripheral Island**,
 - [x] **Core SystemMonitor (`src/dpi_core/sysmon.py`)**: Módulo 100% Python 3 stdlib consumindo `/proc` e `/sys`: CPU (delta `/proc/stat`, loadavg e hwmon térmico `k10temp`/`coretemp`), RAM (`/proc/meminfo`), GPU (AMD DRM `gpu_busy_percent`, alocação de VRAM e sensores `amdgpu` edge/junction), Disco `/` (`statvfs`) + sensor térmico NVMe, Rede em tempo real (`/proc/net/dev` delta RX/TX) e Uptime (`/proc/uptime`).
 - [x] **Integração CLI (`src/dpi_core/cli.py`)**: Objeto `system` integrado ao `--island-json` e nova seção formatada \"Monitor de Sistema\" no dashboard `--pretty`.
 - [x] **5ª Aba \"Sistema\" no Popover Bento Grid**: Layout de 2 colunas com cards de CPU, GPU, Memória RAM e Disco & Rede.
-- [x] **Micro-integração Notchy Peek**: Telemetria rápida de CPU/RAM exibida em tempo real no estágio intermediário do Notch.
 
 ---
 

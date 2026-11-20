@@ -428,6 +428,19 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: validação da integração no CLI, saída `--pretty`, 5ª aba no applet e integridade CSS.
 - **Validação**: 50/50 testes unitários aprovados, telemetria em tempo real validada ao vivo (Ryzen CPU, Radeon GPU, RAM, NVMe, rede `enp7s0`) e applet recarregado no Cinnamon em 821ms com zero erros.
 
+### `UX-018` — True Apple Phone Notch Integrado na TopBar sem Faixa Flutuante Intermediária (`2026-11-20`)
+- **Severidade**: Aprimoramento de UX e Simplificação de Interação.
+- **Causa Raiz & Solução**:
+  - A faixa flutuante intermediária Notchy Peek (`_peekActor`) introduzida na v1.2.0 causava fricção cognitiva e interceptava o clique do usuário que desejava expandir diretamente o Popover Bento Grid. Além disso, o usuário solicitou que o visual de Notch fosse integrado diretamente à TopBar, emulando um Notch de iPhone/telefone.
+  - Foi removida completamente a faixa flutuante `_peekActor` e seus timers de hover/grace. O clique nos segmentos da Ilha agora abre diretamente o Popover Bento Grid de 5 abas.
+  - O contorno da cápsula na TopBar (`.dpi-unified-capsule` e `.dpi-standalone-capsule`) foi redesenhado com geometria autêntica de **Apple Phone Notch**: colado no topo (`margin-top: 0; border-top: none;`), com cantos inferiores arredondados em `16px` (`border-radius: 0 0 16px 16px;`), bordas laterais e inferiores sutis (`1px solid rgba(255, 255, 255, 0.08)` / `0.12`), drop-shadow elegante e expansão orgânica (`padding: 0 16px`) no hover e no estado aberto.
+  - Os **Tooltips Animados LiquidGlass** (`_tooltipActor`) foram integralmente preservados, agora posicionados 6px abaixo da barra superior com descarte rigoroso no ciclo de vida.
+- **Arquivos Modificados**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: remoção de `_peekActor` e métodos associados; preservação e simplificação de `_tooltipActor`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: estilização do True Apple Phone Notch, expansão orgânica e remoção de classes órfãs do Notchy Peek (205 regras CSS).
+  - `tests/test_cli_and_applet.py`: remoção das asserções de `_peekActor` e validação do True Apple Phone Notch e tooltips animados.
+- **Validação**: 50/50 testes aprovados, applet recarregado em 825ms com zero erros no `~/.xsession-errors`.
+
 ---
 
 ## 5. Procedimentos de Rollback

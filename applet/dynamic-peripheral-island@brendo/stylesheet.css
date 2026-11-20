@@ -7,86 +7,96 @@
 /* --- Unified TopBar Capsule (applied to panel._centerBox) --- */
 
 .dpi-unified-capsule {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
-    border-radius: 0 0 14px 14px;
+    border-radius: 0 0 16px 16px;
     margin-top: 0;
-    padding: 0 10px 2px 10px;
+    padding: 0 12px 1px 12px;
     spacing: 2px;
-    transition-duration: 320ms;
+    transition-duration: 280ms;
 }
 
 .dpi-unified-capsule.dpi-theme-dark {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
+    background-color: rgba(12, 13, 20, 0.94);
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40);
     color: #F8FAFC;
 }
 
 .dpi-unified-capsule.dpi-theme-light {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
+    background-color: rgba(248, 250, 252, 0.94);
+    border-top: none;
+    border-left: 1px solid rgba(15, 23, 42, 0.10);
+    border-right: 1px solid rgba(15, 23, 42, 0.10);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
     color: #0F172A;
 }
 
 .dpi-unified-capsule.dpi-theme-dark.dpi-capsule-hovered,
 .dpi-unified-capsule.dpi-theme-dark.dpi-capsule-open {
-    background-color: rgba(15, 16, 24, 0.90);
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
-    border-radius: 0 0 14px 14px;
+    background-color: rgba(18, 20, 30, 0.98);
+    border-bottom-color: rgba(189, 147, 249, 0.55);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.50);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
 }
 
 .dpi-unified-capsule.dpi-theme-light.dpi-capsule-hovered,
 .dpi-unified-capsule.dpi-theme-light.dpi-capsule-open {
-    background-color: rgba(248, 250, 252, 0.94);
-    border-color: rgba(15, 23, 42, 0.16);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-    border-radius: 0 0 14px 14px;
+    background-color: rgba(255, 255, 255, 0.98);
+    border-bottom-color: rgba(147, 51, 234, 0.45);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
 }
 
 /* Fallback when applet is placed outside panel._centerBox */
 .dpi-standalone-capsule {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
-    border-radius: 0 0 14px 14px;
+    border-radius: 0 0 16px 16px;
     margin-top: 0;
-    padding: 0 10px 2px 10px;
+    padding: 0 12px 1px 12px;
     spacing: 4px;
-    transition-duration: 320ms;
+    transition-duration: 280ms;
 }
 
 .dpi-standalone-capsule.dpi-theme-dark {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
+    background-color: rgba(12, 13, 20, 0.94);
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40);
     color: #F8FAFC;
 }
 
 .dpi-standalone-capsule.dpi-theme-light {
-    background-color: transparent;
-    border: 1px solid transparent;
-    box-shadow: none;
+    background-color: rgba(248, 250, 252, 0.94);
+    border-top: none;
+    border-left: 1px solid rgba(15, 23, 42, 0.10);
+    border-right: 1px solid rgba(15, 23, 42, 0.10);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
     color: #0F172A;
 }
 
 .dpi-standalone-capsule.dpi-theme-dark.dpi-capsule-hovered,
 .dpi-standalone-capsule.dpi-theme-dark.dpi-capsule-open {
-    background-color: rgba(15, 16, 24, 0.90);
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
-    border-radius: 0 0 14px 14px;
+    background-color: rgba(18, 20, 30, 0.98);
+    border-bottom-color: rgba(189, 147, 249, 0.55);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.50);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
 }
 
 .dpi-standalone-capsule.dpi-theme-light.dpi-capsule-hovered,
 .dpi-standalone-capsule.dpi-theme-light.dpi-capsule-open {
-    background-color: rgba(248, 250, 252, 0.94);
-    border-color: rgba(15, 23, 42, 0.16);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-    border-radius: 0 0 14px 14px;
+    background-color: rgba(255, 255, 255, 0.98);
+    border-bottom-color: rgba(147, 51, 234, 0.45);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+    padding: 0 16px 1px 16px;
+    border-radius: 0 0 16px 16px;
 }
 
 /* Left slot holding Peripherals on the left side of Clock */
@@ -1188,94 +1198,7 @@
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-/* ==========================================================================
- * Apple Notch Peek — Intermediate Floating Stage (FEAT-006 / notchy.dev)
- * ========================================================================== */
 
-.dpi-notch-peek {
-    width: 480px;
-    max-width: 480px;
-    padding: 6px 12px;
-    border-radius: 0 0 18px 18px;
-    spacing: 10px;
-    transition-duration: 200ms;
-}
-
-.dpi-notch-peek.dpi-theme-dark {
-    background-color: rgba(16, 18, 28, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-top: none;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-    color: #F8FAFC;
-}
-
-.dpi-notch-peek.dpi-theme-light {
-    background-color: rgba(248, 250, 252, 0.94);
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    border-top: none;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
-    color: #0F172A;
-}
-
-.dpi-peek-media-box {
-    spacing: 8px;
-}
-
-.dpi-peek-media-title {
-    font-weight: 600;
-    color: #F8FAFC;
-}
-
-.dpi-theme-light .dpi-peek-media-title {
-    color: #0F172A;
-}
-
-.dpi-peek-media-artist {
-    font-size: 0.88em;
-    color: rgba(248, 250, 252, 0.70);
-}
-
-.dpi-theme-light .dpi-peek-media-artist {
-    color: rgba(15, 23, 42, 0.70);
-}
-
-.dpi-peek-btn {
-    padding: 3px 6px;
-    border-radius: 6px;
-    background-color: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #F8FAFC;
-    transition-duration: 150ms;
-}
-
-.dpi-peek-btn:hover {
-    background-color: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.24);
-}
-
-.dpi-theme-light .dpi-peek-btn {
-    background-color: rgba(15, 23, 42, 0.06);
-    border-color: rgba(15, 23, 42, 0.12);
-    color: #0F172A;
-}
-
-.dpi-theme-light .dpi-peek-btn:hover {
-    background-color: rgba(15, 23, 42, 0.12);
-}
-
-.dpi-peek-expand-btn {
-    padding: 3px 8px;
-    border-radius: 6px;
-    background-color: rgba(147, 51, 234, 0.20);
-    border: 1px solid rgba(168, 85, 247, 0.35);
-    color: #D8B4FE;
-    transition-duration: 150ms;
-}
-
-.dpi-peek-expand-btn:hover {
-    background-color: rgba(147, 51, 234, 0.32);
-    border-color: rgba(168, 85, 247, 0.50);
-}
 
 /* ==========================================================================
  * Animated LiquidGlass Tooltip (UX-017)

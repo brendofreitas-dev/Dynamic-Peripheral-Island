@@ -5,6 +5,20 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.1] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **UX-018 (True Apple Phone Notch Integrado na TopBar sem Faixa Flutuante Intermediária)**:
+  - `applet/dynamic-peripheral-island@brendo/applet.js`:
+    - Removida completamente a faixa flutuante intermediária Notchy Peek (`_peekActor`, `_initNotchPeek`, `_showNotchPeek`, `_hideNotchPeek` e timers associados), eliminando interferências de clique e simplificando o fluxo de interação.
+    - O clique nos segmentos de Periféricos ou Antigravity agora abre de forma instantânea e confiável o Popover Bento Grid de 5 abas (`700px`).
+    - Preservados com precisão os **Tooltips Animados LiquidGlass** (`_tooltipActor`, `_showAnimatedTooltip`, `_hideAnimatedTooltip`), agora posicionados 6px abaixo da TopBar com limpeza no ciclo de vida em `on_applet_removed_from_panel()`.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`:
+    - `.dpi-unified-capsule` e `.dpi-standalone-capsule` redesenhados com a geometria autêntica do **Apple Phone Notch** integrada diretamente na barra superior: `border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; transition-duration: 280ms;`.
+    - Fundo escuro translúcido (`rgba(12, 13, 20, 0.94)` dark / `rgba(248, 250, 252, 0.94)` light), bordas especulares laterais e inferiores e drop-shadow `0 3px 12px rgba(0, 0, 0, 0.40)`.
+    - No hover e estado aberto (`.dpi-capsule-hovered`, `.dpi-capsule-open`), expansão orgânica elegante na TopBar (`padding: 0 16px 1px 16px; border-bottom-color: rgba(189, 147, 249, 0.55); background-color: rgba(18, 20, 30, 0.98);`).
+    - Removidas todas as regras e seletores legados da faixa flutuante (`.dpi-notch-peek`), resultando em 205 regras CSS limpas e sem estilos órfãos.
+
 ## [1.3.0] - 2026-11-20
 
 ### Adicionado

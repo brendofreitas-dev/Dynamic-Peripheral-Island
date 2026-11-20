@@ -5,6 +5,14 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.10] - 2026-11-20
+
+### Corrigido
+- **BUG-008 (Detecção Precisa de Estado IDLE vs WORKING no Swarm Tracker)**:
+  - `src/dpi_core/antigravity.py`: corrigido o falso positivo onde subagentes inativos ou dormindo no message board (`swarm_wait`) permaneciam marcados como `WORKING` por até 90 segundos.
+  - O parser de transcripts (`_parse_transcript` e `index_transcripts`) agora avalia `last_planner_tools`, chamadas ativas de `swarm_wait`, steps de retorno `GENERIC` e encerramento limpo de turnos (`PLANNER_RESPONSE` com status `DONE` e sem tool calls pendentes), marcando o agente imediatamente como `IDLE`.
+  - Introduzido `schema_version: 2` no cache `antigravity_index.json` para invalidação atômica e reindexação instantânea de transcripts existentes.
+
 ## [1.0.9] - 2026-11-20
 
 ### Alterado

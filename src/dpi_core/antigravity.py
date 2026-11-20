@@ -516,14 +516,15 @@ class AntigravityCollector:
 
     def _load_index_cache(self) -> Dict[str, Any]:
         if not self.cache_path.is_file():
-            return {"version": 1, "files": {}}
+            return {"version": 2, "files": {}}
         try:
             data = json.loads(self.cache_path.read_text(encoding="utf-8"))
             if isinstance(data, dict) and isinstance(data.get("files"), dict):
-                return data
+                if data.get("version") == 2:
+                    return data
         except (OSError, json.JSONDecodeError):
             pass
-        return {"version": 1, "files": {}}
+        return {"version": 2, "files": {}}
 
     def _save_index_cache(self, cache: Dict[str, Any]) -> None:
         try:
@@ -544,7 +545,11 @@ class AntigravityCollector:
         steps = 0
         last_step_ts = float(mtime_ns) / 1e9
         last_step_type = ""
+        last_step_status = ""
         last_tool_names: List[str] = []
+        last_planner_tools: List[str] = []
+        last_planner_had_wait = False
+        last_is_wait_output = False
         last_content = ""
 
         input_tokens = 0
@@ -576,12 +581,18 @@ class AntigravityCollector:
 
                     step_type = str(obj.get("type") or "")
                     last_step_type = step_type
+                    step_status = str(obj.get("status") or "")
+                    last_step_status = step_status
                     created_ts = parse_iso_utc(obj.get("created_at"))
                     if created_ts is not None:
                         last_step_ts = created_ts
 
                     content = str(obj.get("content") or "")
                     last_content = content
+
+                    if step_type == "USER_INPUT":
+                        last_planner_had_wait = False
+                        last_is_wait_output = False
 
                     if step_type == "SYSTEM_MESSAGE":
                         m_role = _SWARM_ASSIGN_RE.search(content)
@@ -593,7 +604,7 @@ class AntigravityCollector:
                         project = _extract_project_from_text(content)
 
                     tool_calls = obj.get("tool_calls") or []
-                    if isinstance(tool_calls, list):
+                    if isinstance(tool_calls, list) and tool_calls:
                         names: List[str] = []
                         for tc in tool_calls:
                             if not isinstance(tc, dict):
@@ -617,6 +628,16 @@ class AntigravityCollector:
                                             project = proj
                                             break
                         last_tool_names = names
+                    elif step_type == "PLANNER_RESPONSE":
+                        last_tool_names = []
+
+                    if step_type == "PLANNER_RESPONSE":
+                        last_planner_tools = list(last_tool_names)
+                        last_planner_had_wait = "swarm_wait" in last_planner_tools
+                        last_is_wait_output = False
+                    elif step_type == "GENERIC":
+                        if "Waiting for " in content:
+                            last_is_wait_output = True
 
                     if step_type == "PLANNER_RESPONSE":
                         inp = int(obj.get("input_tokens") or 0)
@@ -653,6 +674,7 @@ class AntigravityCollector:
 
         total_tokens = input_tokens + cache_read_tokens + output_tokens
         return {
+            "schema_version": 2,
             "mtime_ns": mtime_ns,
             "size": size,
             "conv_id": conv_id,
@@ -663,7 +685,11 @@ class AntigravityCollector:
             "steps": steps,
             "last_step_ts": last_step_ts,
             "last_step_type": last_step_type,
+            "last_step_status": last_step_status,
             "last_tool_names": last_tool_names,
+            "last_planner_tools": last_planner_tools,
+            "last_planner_had_wait": last_planner_had_wait,
+            "last_is_wait_output": last_is_wait_output,
             "last_done": "[done]" in last_content,
             "input_tokens": input_tokens,
             "cache_read_tokens": cache_read_tokens,
@@ -698,6 +724,7 @@ class AntigravityCollector:
             cached = files_cache.get(key)
             if (
                 isinstance(cached, dict)
+                and cached.get("schema_version") == 2
                 and cached.get("mtime_ns") == st.st_mtime_ns
                 and cached.get("size") == st.st_size
             ):
@@ -715,6 +742,7 @@ class AntigravityCollector:
             dirty = True
 
         if dirty:
+            cache["version"] = 2
             cache["files"] = files_cache
             self._save_index_cache(cache)
 
@@ -752,12 +780,19 @@ class AntigravityCollector:
             age_sec = now_ts - (rec.get("mtime_ns", 0) / 1e9)
             if age_sec > 600.0:
                 continue
-            is_waiting = (
-                "swarm_wait" in (rec.get("last_tool_names") or [])
-                or rec.get("last_done")
-                or (now_ts - float(rec.get("last_step_ts", 0.0))) > 90.0
+
+            last_type = str(rec.get("last_step_type") or "")
+            last_status = str(rec.get("last_step_status") or "")
+            planner_tools = rec.get("last_planner_tools") or []
+
+            is_idle = (
+                (last_type == "PLANNER_RESPONSE" and last_status == "DONE" and not planner_tools)
+                or bool(rec.get("last_planner_had_wait"))
+                or bool(rec.get("last_is_wait_output"))
+                or bool(rec.get("last_done"))
+                or (now_ts - float(rec.get("last_step_ts", 0.0))) > 45.0
             )
-            status = "IDLE" if is_waiting else "WORKING"
+            status = "IDLE" if is_idle else "WORKING"
             swarm_agents.append(
                 {
                     "id": rec["conv_id"][:8],

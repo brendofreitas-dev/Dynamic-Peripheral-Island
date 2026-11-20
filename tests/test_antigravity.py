@@ -368,6 +368,109 @@ class TestAntigravityCollector(unittest.TestCase):
             roles = {a["role"]: a["status"] for a in snap3["swarm"]["agents"]}
             self.assertEqual(roles.get("hw-engine"), "IDLE")
 
+    def test_swarm_subagent_idle_vs_working_states_bug_008(self) -> None:
+        """BUG-008: Accurate IDLE vs WORKING state detection for Swarm subagents."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ag_dir = root / "antigravity"
+            cache_path = root / "cache" / "ag_index.json"
+            now_dt = datetime.now(timezone.utc)
+            now_ts = now_dt.timestamp()
+            now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            # 1. Agent that finished turn with no tool calls (docs-git): IDLE
+            done_dir = ag_dir / "brain" / "conv_done_111" / ".system_generated" / "logs"
+            done_dir.mkdir(parents=True)
+            done_log = done_dir / "transcript.jsonl"
+            done_lines = [
+                {
+                    "step_index": 0,
+                    "type": "SYSTEM_MESSAGE",
+                    "created_at": now_iso,
+                    "content": "Your assignment (recorded on the board as #10 for @docs-git): update docs",
+                },
+                {
+                    "step_index": 1,
+                    "type": "PLANNER_RESPONSE",
+                    "status": "DONE",
+                    "created_at": now_iso,
+                    "content": "All documentation is updated and committed.",
+                    "tool_calls": [],
+                },
+            ]
+            done_log.write_text("\n".join(json.dumps(x) for x in done_lines) + "\n", encoding="utf-8")
+
+            # 2. Agent waiting on message board via swarm_wait + GENERIC result (monitor): IDLE
+            wait_dir = ag_dir / "brain" / "conv_wait_222" / ".system_generated" / "logs"
+            wait_dir.mkdir(parents=True)
+            wait_log = wait_dir / "transcript.jsonl"
+            wait_lines = [
+                {
+                    "step_index": 0,
+                    "type": "SYSTEM_MESSAGE",
+                    "created_at": now_iso,
+                    "content": "Your assignment (recorded on the board as #11 for @monitor): watch board",
+                },
+                {
+                    "step_index": 1,
+                    "type": "PLANNER_RESPONSE",
+                    "status": "DONE",
+                    "created_at": now_iso,
+                    "tool_calls": [{"name": "swarm_wait", "args": {"since": 50}}],
+                },
+                {
+                    "step_index": 2,
+                    "type": "GENERIC",
+                    "created_at": now_iso,
+                    "content": "Waiting for a message that calls on you by name...",
+                    "tool_calls": [],
+                },
+            ]
+            wait_log.write_text("\n".join(json.dumps(x) for x in wait_lines) + "\n", encoding="utf-8")
+
+            # 3. Agent actively running a tool call (hw-engine): WORKING
+            work_dir = ag_dir / "brain" / "conv_work_333" / ".system_generated" / "logs"
+            work_dir.mkdir(parents=True)
+            work_log = work_dir / "transcript.jsonl"
+            work_lines = [
+                {
+                    "step_index": 0,
+                    "type": "SYSTEM_MESSAGE",
+                    "created_at": now_iso,
+                    "content": "Your assignment (recorded on the board as #12 for @hw-engine): execute build",
+                },
+                {
+                    "step_index": 1,
+                    "type": "PLANNER_RESPONSE",
+                    "status": "DONE",
+                    "created_at": now_iso,
+                    "tool_calls": [{"name": "run_command", "args": {"CommandLine": "make"}}],
+                },
+            ]
+            work_log.write_text("\n".join(json.dumps(x) for x in work_lines) + "\n", encoding="utf-8")
+
+            collector = AntigravityCollector(
+                antigravity_dir=ag_dir,
+                cache_path=cache_path,
+            )
+
+            # Test immediate evaluation
+            indexed = collector.index_transcripts(now_ts=now_ts)
+            swarm = indexed["swarm"]
+            self.assertEqual(swarm["total_count"], 3)
+            self.assertEqual(swarm["active_count"], 1)
+
+            roles = {a["role"]: a["status"] for a in swarm["agents"]}
+            self.assertEqual(roles.get("docs-git"), "IDLE")
+            self.assertEqual(roles.get("monitor"), "IDLE")
+            self.assertEqual(roles.get("hw-engine"), "WORKING")
+
+            # 4. Inactivity timeout (> 45s) transitions working agent to IDLE
+            indexed_later = collector.index_transcripts(now_ts=now_ts + 50.0)
+            roles_later = {a["role"]: a["status"] for a in indexed_later["swarm"]["agents"]}
+            self.assertEqual(roles_later.get("hw-engine"), "IDLE")
+            self.assertEqual(indexed_later["swarm"]["active_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

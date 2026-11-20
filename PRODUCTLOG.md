@@ -275,6 +275,16 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: asserções atualizadas para validar o texto compacto `85%`.
 - **Validação**: 34/34 testes aprovados e cápsula da TopBar harmonizada no Cinnamon.
 
+### `BUG-008` — Falso Positivo de Subagentes em Estado WORKING no Swarm Tracker (`2026-11-20`)
+- **Severidade**: Média (telemetria incorreta de subagentes ativos no monitor Antigravity VU).
+- **Causa Raiz**:
+  1. Quando um agente do Swarm conclui seu turno, o step final gravado em `transcript.jsonl` possui `type = "PLANNER_RESPONSE"`, `status = "DONE"` e `tool_calls = []`. O parser anterior considerava qualquer step recente (< 90s) como indicativo de `WORKING`, ignorando a ausência de tools pendentes.
+  2. Quando um worker chama `swarm_wait`, o `PLANNER_RESPONSE` é imediatamente sucedido por um step assíncrono `type = "GENERIC"` com a mensagem de espera (`"Waiting for..."`) e `tool_calls = []`. O parser antigo sobrescrevia a lista de tools com a do step genérico, apagando o registro da chamada a `swarm_wait` e mantendo o agente como ativo.
+- **Arquivos Modificados**:
+  - `src/dpi_core/antigravity.py`: estruturado o rastreamento em `_parse_transcript` para reter `last_planner_had_wait` (resetado apenas se ocorrer novo `USER_INPUT`), `last_is_wait_output` e `last_planner_tools`; redefinida a heurística de `IDLE` imediato para turnos encerrados sem tools, esperas em `swarm_wait` ou inatividade superior a 45s; introduzido `schema_version = 2` para invalidação imediata do cache `antigravity_index.json`.
+  - `tests/test_antigravity.py`: novo teste unitário `test_swarm_subagent_idle_vs_working_states_bug_008` validando a transição determinística para `IDLE` e `WORKING`.
+- **Validação**: 35/35 testes unitários aprovados e contagem exata de agentes ativos no Swarm verificada em runtime real via `dpi-hub --island-json`.
+
 ---
 
 ## 5. Procedimentos de Rollback

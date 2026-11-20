@@ -5,6 +5,26 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] - 2026-11-20
+
+### Adicionado
+- **FEAT-007 (Monitor de Sistema Nativo Inspirado em notch-app.com.br)**:
+  - `src/dpi_core/sysmon.py`: implementada a classe `SystemMonitor` 100% em Python 3 stdlib (zero dependências externas), com telemetria direta via `/proc` e `/sys`:
+    - **CPU**: cálculo de delta de uso via `/proc/stat` (`usage_pct`), monitoramento térmico via `/sys/class/hwmon` (`k10temp` Tctl/Tdie, `zenpower`, `coretemp`, `acpitz`), contagem de threads e load average.
+    - **RAM**: parsing de `/proc/meminfo` com memória total, usada e percentual de ocupação em GB e %.
+    - **GPU**: suporte a AMD DRM (`gpu_busy_percent`, VRAM total e usada) e hwmon `amdgpu` com leitura térmica de `edge` e `junction`, extensível a múltiplos vendors.
+    - **Disco & NVMe**: espaço em disco via `os.statvfs` para o ponto de montagem `/` e leitura da temperatura do sensor térmico do SSD NVMe (`hwmon` `nvme` `Composite`).
+    - **Rede**: identificação automática da interface física ativa em `/proc/net/dev`, cálculo de taxa de transferência delta em tempo real (`rx_kbps`, `tx_kbps`) e formatação amigável (`rx_text`, `tx_text` em KB/s e MB/s).
+    - **Uptime**: leitura de `/proc/uptime` e formatação amigável em horas e minutos.
+  - `src/dpi_core/cli.py` & `bin/dpi-hub`:
+    - Inclusão do objeto `system` no payload `--island-json`.
+    - Nova seção "Monitor de Sistema" no dashboard `--pretty` com tipografia limpa, barras e telemetria de CPU, GPU, RAM, Disco, Rede e Uptime sem emojis estruturais.
+  - `applet/dynamic-peripheral-island@brendo/applet.js` & `stylesheet.css`:
+    - Expansão do TabBar para 5 abas equilibradas: `Periféricos` | `Áudio` | `Sistema` | `Antigravity VU` | `Ajustes` com ícone simbólico `utilities-system-monitor-symbolic`.
+    - Implementação da aba `Sistema` em Bento Grid de 2 colunas (`336px`): Coluna Esquerda com Cards de CPU e GPU (com barras de severidade e VRAM dedicada); Coluna Direita com Cards de Memória RAM e Disco & Rede em tempo real.
+    - Micro-integração no Notchy Peek (Estágio 2): badge compacta com telemetria rápida de CPU/RAM em tempo real.
+  - `tests/test_sysmon.py`: novo módulo de testes contendo 6 testes unitários determinísticos com mocks completos de `/proc` e `/sys`.
+
 ## [1.2.0] - 2026-11-20
 
 ### Adicionado

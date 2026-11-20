@@ -196,10 +196,45 @@ def _mock_ag_collector() -> mock.MagicMock:
     return ag
 
 
+def _mock_sysmon_manager() -> mock.MagicMock:
+    mgr = mock.MagicMock()
+    mgr.get_state.return_value = {
+        "cpu": {"usage_pct": 24.5, "temp_c": 52.0, "cores": 12, "load_1m": 0.65},
+        "ram": {"used_gb": 8.0, "total_gb": 15.5, "used_pct": 51.6},
+        "gpu": {
+            "available": True,
+            "vendor": "AMD",
+            "usage_pct": 18,
+            "temp_c": 49.0,
+            "junction_c": 52.0,
+            "vram_used_gb": 1.2,
+            "vram_total_gb": 6.0,
+            "vram_pct": 20.0,
+        },
+        "disk": {
+            "path": "/",
+            "used_gb": 120.0,
+            "total_gb": 500.0,
+            "used_pct": 24.0,
+            "temp_c": 41.0,
+            "nvme_temp_c": 41.0,
+        },
+        "network": {
+            "interface": "enp7s0",
+            "rx_kbps": 128.0,
+            "tx_kbps": 32.0,
+            "rx_text": "128 KB/s",
+            "tx_text": "32 KB/s",
+        },
+        "uptime": {"uptime_sec": 18000, "uptime_str": "5h 0m"},
+    }
+    return mgr
+
+
 class TestCliAndOutputs(unittest.TestCase):
     """Tests bin/dpi-hub modes (--island-json, --waybar, --pretty) and settings/control flags."""
 
-    def _run_cli(self, argv, settings_path=None, hw=None, ag=None, audio=None, media=None):
+    def _run_cli(self, argv, settings_path=None, hw=None, ag=None, audio=None, media=None, sysmon=None):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = cli.main(
@@ -209,6 +244,7 @@ class TestCliAndOutputs(unittest.TestCase):
                 settings_path=settings_path,
                 audio_manager=audio,
                 media_manager=media,
+                sysmon_manager=sysmon or _mock_sysmon_manager(),
             )
         return rc, buf.getvalue()
 
@@ -231,11 +267,16 @@ class TestCliAndOutputs(unittest.TestCase):
                 "settings",
                 "audio",
                 "media",
+                "system",
             ):
                 self.assertIn(key, data)
             self.assertEqual(len(data["capsule"]["peripherals"]), 4)
             self.assertEqual(data["capsule"]["antigravity"]["label"], "Neon 81%")
             self.assertEqual(data["capsule"]["antigravity"]["swarm_active"], 2)
+            self.assertEqual(data["system"]["cpu"]["usage_pct"], 24.5)
+            self.assertEqual(data["system"]["ram"]["used_pct"], 51.6)
+            self.assertEqual(data["system"]["gpu"]["vendor"], "AMD")
+            self.assertEqual(data["system"]["network"]["interface"], "enp7s0")
 
             # --waybar (single-line JSON)
             rc_w, out_w = self._run_cli(["--waybar"], settings_path=settings_path)
@@ -255,6 +296,13 @@ class TestCliAndOutputs(unittest.TestCase):
             self.assertIn("AJAZZ AJ179 V2", out_p)
             self.assertIn("Gemini 4 Neon", out_p)
             self.assertIn("Histograma 7 Dias", out_p)
+            self.assertIn("Monitor de Sistema", out_p)
+            self.assertIn("CPU:", out_p)
+            self.assertIn("RAM:", out_p)
+            self.assertIn("GPU:", out_p)
+            self.assertIn("Disco:", out_p)
+            self.assertIn("Rede:", out_p)
+            self.assertIn("enp7s0", out_p)
 
     def test_cli_settings_pin_and_hardware_control_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -496,6 +544,17 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_buildMediaPlayerCard(", src)
         self.assertIn("_buildAudioMixerCard(", src)
         self.assertIn("_buildPerAppAudioCard(", src)
+
+        # FEAT-007: Native System Monitor (5th Tab, Bento Grid Cards & Peek integration)
+        self.assertIn('"system"', src)
+        self.assertIn('"Sistema"', src)
+        self.assertIn("utilities-system-monitor-symbolic", src)
+        self.assertIn("_renderSystemTab()", src)
+        self.assertIn("_buildCpuCard(", src)
+        self.assertIn("_buildGpuCard(", src)
+        self.assertIn("_buildRamCard(", src)
+        self.assertIn("_buildDiskNetCard(", src)
+        self.assertIn('["peripherals", "audio", "system", "antigravity", "settings"]', src)
 
         # UX-016: 100% GPU transition (duration: 280, EASE_OUT_CUBIC, opacity: 150) without white flash
         self.assertIn("Clutter.AnimationMode.EASE_OUT_CUBIC", src)

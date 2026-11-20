@@ -6,6 +6,9 @@ from .audio import (
     AudioMixerManager,
     MediaPlayerManager,
 )
+from .sysmon import (
+    SystemMonitor,
+)
 from .hardware import (
     AjazzMouseDriver,
     FuxiHeadsetDriver,
@@ -18,12 +21,13 @@ from .hardware import (
     verify_checksum,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "__version__",
     "AudioMixerManager",
     "MediaPlayerManager",
+    "SystemMonitor",
     "AjazzMouseDriver",
     "FuxiHeadsetDriver",
     "K500KeyboardDriver",

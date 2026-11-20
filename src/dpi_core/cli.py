@@ -98,6 +98,15 @@ def _get_media_manager() -> Any:
         return None
 
 
+def _get_sysmon_manager() -> Any:
+    try:
+        from dpi_core.sysmon import SystemMonitor
+
+        return SystemMonitor()
+    except Exception:
+        return None
+
+
 def _safe_audio_state(audio_manager: Any = None) -> Dict[str, Any]:
     if audio_manager is None:
         audio_manager = _get_audio_manager()
@@ -124,6 +133,19 @@ def _safe_media_state(media_manager: Any = None) -> Dict[str, Any]:
     if media_manager is not None:
         try:
             state = media_manager.get_state()
+            if isinstance(state, dict):
+                return state
+        except Exception as exc:
+            return {"available": False, "error": str(exc)}
+    return {"available": False}
+
+
+def _safe_system_state(sysmon_manager: Any = None) -> Dict[str, Any]:
+    if sysmon_manager is None:
+        sysmon_manager = _get_sysmon_manager()
+    if sysmon_manager is not None:
+        try:
+            state = sysmon_manager.get_state()
             if isinstance(state, dict):
                 return state
         except Exception as exc:
@@ -309,6 +331,7 @@ def build_island_payload(
     now_ts: Optional[float] = None,
     audio_manager: Any = None,
     media_manager: Any = None,
+    sysmon_manager: Any = None,
 ) -> Dict[str, Any]:
     """Assemble the complete unified `--island-json` payload."""
     ts = int(now_ts if now_ts is not None else time.time())
@@ -320,6 +343,7 @@ def build_island_payload(
 
     audio_state = _safe_audio_state(audio_manager)
     media_state = _safe_media_state(media_manager)
+    system_state = _safe_system_state(sysmon_manager)
 
     collector = ag_collector or AntigravityCollector()
     ag_snap = collector.collect(now_ts=now_ts)
@@ -371,6 +395,7 @@ def build_island_payload(
         "peripherals": devices,
         "audio": audio_state,
         "media": media_state,
+        "system": system_state,
         "antigravity": ag_snap,
         "settings": settings,
     }
@@ -540,6 +565,49 @@ def format_pretty(payload: Dict[str, Any]) -> str:
             f"  {bold}{title}{reset}" + (f" · {artist}" if artist else ""),
             f"  {dim}{pos_str} / {len_str}{reset}",
         ])
+
+    system = payload.get("system") or {}
+    cpu = system.get("cpu") or {}
+    ram = system.get("ram") or {}
+    gpu = system.get("gpu") or {}
+    disk = system.get("disk") or {}
+    net = system.get("network") or system.get("net") or {}
+    up = system.get("uptime") or {}
+    if system.get("available", True) and (cpu or ram or gpu):
+        lines.extend(["", f"{bold}Monitor de Sistema{reset}"])
+        if cpu:
+            c_pct = int(cpu.get("usage_pct", 0))
+            c_temp = f" · {cpu['temp_c']:.0f}°C" if cpu.get("temp_c") is not None else ""
+            cores = cpu.get("cores") or cpu.get("cpu_count") or 0
+            c_cores = f"{cores}T" if cores else ""
+            load_val = cpu.get("load_1m")
+            if load_val is None and cpu.get("load_avg"):
+                load_val = cpu["load_avg"][0]
+            c_load = f" · load {load_val:.2f}" if load_val is not None else ""
+            lines.append(f"  CPU:   {c_pct:2d}%{c_temp} {dim}({c_cores}{c_load}){reset}")
+        if gpu and gpu.get("available"):
+            g_pct = int(gpu.get("usage_pct", 0))
+            g_temp = f" · {gpu['temp_c']:.0f}°C" if gpu.get("temp_c") is not None else ""
+            g_vram = f"{gpu.get('vram_used_gb', 0.0):.1f}/{gpu.get('vram_total_gb', 0.0):.1f} GB ({gpu.get('vram_pct', 0):.0f}%)"
+            lines.append(f"  GPU:   {g_pct:2d}%{g_temp} {dim}(VRAM {g_vram}){reset}")
+        if ram:
+            r_used = ram.get("used_gb", 0.0)
+            r_total = ram.get("total_gb", 0.0)
+            r_pct = int(ram.get("used_pct", 0))
+            lines.append(f"  RAM:   {r_pct:2d}% {dim}({r_used:.1f}/{r_total:.1f} GB){reset}")
+        if disk:
+            d_used = disk.get("used_gb", 0.0)
+            d_total = disk.get("total_gb", 0.0)
+            d_pct = int(disk.get("used_pct", 0))
+            d_temp = f" · {disk['temp_c']:.0f}°C" if disk.get("temp_c") is not None else ""
+            lines.append(f"  Disco: {d_pct:2d}%{d_temp} {dim}(/ {d_used:.1f}/{d_total:.1f} GB){reset}")
+        if net:
+            rx = net.get("rx_text", "0 KB/s")
+            tx = net.get("tx_text", "0 KB/s")
+            iface = net.get("interface", "net")
+            lines.append(f"  Rede:  ↓ {rx} · ↑ {tx} {dim}[{iface}]{reset}")
+        if up.get("uptime_str"):
+            lines.append(f"  {dim}Uptime: {up['uptime_str']}{reset}")
 
     ag = payload.get("antigravity") or {}
     plan = ag.get("plan") or {}
@@ -863,6 +931,7 @@ def main(
     settings_path: Optional[Path] = None,
     audio_manager: Any = None,
     media_manager: Any = None,
+    sysmon_manager: Any = None,
 ) -> int:
     """CLI entrypoint."""
     parser = build_parser()
@@ -898,6 +967,7 @@ def main(
         settings_path=settings_path,
         audio_manager=audio_manager,
         media_manager=media_manager,
+        sysmon_manager=sysmon_manager,
     )
 
     if args.waybar:

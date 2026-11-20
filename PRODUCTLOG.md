@@ -414,6 +414,20 @@ Além disso, foi consolidado o agente dedicado **`docs-git`** (`.agents/agents/d
   - `tests/test_cli_and_applet.py`: asserções de validação CSS e métodos de tooltip.
 - **Validação**: 44/44 testes aprovados, applet recarregado em 324ms sem alertas no `~/.xsession-errors`.
 
+### `FEAT-007` — Monitor de Sistema Nativo Inspirado em notch-app.com.br (`2026-11-20`)
+- **Severidade**: Nova Feature Principal (telemetria de hardware completa integrada à Ilha).
+- **Causa & Racional Técnico**:
+  - Usuários avançados de desktop Linux frequentemente recorrem a applets pesados ou ferramentas externas para monitorar consumo de CPU, GPU, RAM, temperaturas de silício e tráfego de rede.
+  - Inspirando-se na elegância de monitoramento do `notch-app.com.br`, foi concebido o `SystemMonitor` (`src/dpi_core/sysmon.py`) em 100% Python 3 stdlib, consumindo diretamente as interfaces do kernel Linux (`/proc` e `/sys`) com zero dependências externas ou binários adicionais.
+- **Arquivos Modificados**:
+  - `src/dpi_core/sysmon.py`: implementação completa de `SystemMonitor` com delta de `/proc/stat` (CPU %), temperatura via `/sys/class/hwmon` (`k10temp`, `zenpower`, `coretemp`, `acpitz`), parsing de `/proc/meminfo` (RAM GB/%), AMD DRM e VRAM (`amdgpu` edge/junction), disco `/` (`os.statvfs`) e temperatura NVMe, delta de rede em tempo real por interface física ativa (`/proc/net/dev`), e uptime via `/proc/uptime`.
+  - `src/dpi_core/cli.py` & `bin/dpi-hub`: inclusão da chave `\"system\"` no JSON de `--island-json` e nova seção formatada \"Monitor de Sistema\" no dashboard `--pretty`.
+  - `applet/dynamic-peripheral-island@brendo/applet.js`: expansão para 5 abas (`Periféricos`, `Áudio`, `Sistema`, `Antigravity VU`, `Ajustes`), renderização da aba `Sistema` em Bento Grid de 2 colunas com cards especializados (`_buildCpuCard`, `_buildGpuCard`, `_buildRamCard`, `_buildDiskNetCard`) e telemetria resumida no Notchy Peek.
+  - `applet/dynamic-peripheral-island@brendo/stylesheet.css`: ajuste de espaçamento dos botões de abas para 5 itens em 700px.
+  - `tests/test_sysmon.py`: módulo de testes determinísticos com mocks completos de `/proc` e `/sys`.
+  - `tests/test_cli_and_applet.py`: validação da integração no CLI, saída `--pretty`, 5ª aba no applet e integridade CSS.
+- **Validação**: 50/50 testes unitários aprovados, telemetria em tempo real validada ao vivo (Ryzen CPU, Radeon GPU, RAM, NVMe, rede `enp7s0`) e applet recarregado no Cinnamon em 821ms com zero erros.
+
 ---
 
 ## 5. Procedimentos de Rollback

@@ -102,6 +102,21 @@ function quotaSeverityClass(pct) {
     return "ok";
 }
 
+function sysSeverityClass(pct, warnThresh = 60, critThresh = 85) {
+    let p = Number(pct) || 0;
+    if (p >= critThresh) return "crit";
+    if (p >= warnThresh) return "warn";
+    return "ok";
+}
+
+function tempSeverityClass(tempC, warnThresh = 75, critThresh = 85) {
+    if (tempC === null || tempC === undefined || isNaN(tempC)) return "muted";
+    let t = Number(tempC);
+    if (t >= critThresh) return "crit";
+    if (t >= warnThresh) return "warn";
+    return "info";
+}
+
 function formatAudioProfileName(profileId) {
     let raw = String(profileId || "");
     if (raw === "off") return "Off";
@@ -1667,7 +1682,15 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         let media = (this._data && this._data.media) || {};
         let ag = (this._data && this._data.antigravity) || {};
+        let sys = (this._data && this._data.system) || {};
         let devices = this._getDevicesMap();
+
+        let cpu = sys.cpu || {};
+        let ram = sys.ram || {};
+        let rawCpu = cpu && (cpu.usage_pct !== undefined ? cpu.usage_pct : cpu.cpu_pct);
+        let cpuPct = rawCpu !== undefined && rawCpu !== null ? Math.round(Number(rawCpu)) : null;
+        let rawRam = ram && (ram.used_pct !== undefined ? ram.used_pct : ram.ram_pct);
+        let ramPct = rawRam !== undefined && rawRam !== null ? Math.round(Number(rawRam)) : null;
 
         // 1. Left section: Spotify / Media or Peripherals summary
         let leftBox = new St.BoxLayout({
@@ -1757,15 +1780,34 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     y_align: Clutter.ActorAlign.CENTER,
                 }));
             }
+
+            if (cpuPct !== null) {
+                leftBox.add_child(new St.Label({ text: "·", style_class: "dpi-subtitle", y_align: Clutter.ActorAlign.CENTER }));
+                leftBox.add_child(new St.Icon({
+                    icon_name: "computer-symbolic",
+                    icon_type: St.IconType.SYMBOLIC,
+                    icon_size: 14,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+                leftBox.add_child(new St.Label({
+                    text: "CPU: " + cpuPct + "%",
+                    style_class: "dpi-peek-media-title",
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
         }
         this._peekActor.add_child(leftBox);
 
-        // 2. Right container: Antigravity quota pill + Expand button
+        // 2. Right container: System Mini-Pill + Antigravity quota pill + Expand button
         let rightBox = new St.BoxLayout({
             style: "spacing: 6px;",
             x_expand: false,
             y_align: Clutter.ActorAlign.CENTER,
         });
+
+        if (cpuPct !== null && ramPct !== null) {
+            rightBox.add_child(this._makeBadge("CPU " + cpuPct + "% · RAM " + ramPct + "%", "muted"));
+        }
 
         let activeModel = this._extractActiveModelName(ag.active_model) || "Argon";
         let quotas = Array.isArray(ag.quotas) ? ag.quotas : [];
@@ -2111,6 +2153,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             this._renderPeripheralsTab();
         } else if (this._activeTab === "audio") {
             this._renderAudioTab();
+        } else if (this._activeTab === "system") {
+            this._renderSystemTab();
         } else if (this._activeTab === "antigravity") {
             this._renderAntigravityTab();
         } else {
@@ -2120,7 +2164,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _switchTab(newTabId, animate = true) {
         if (!this._popoverRoot) return;
-        let order = ["peripherals", "audio", "antigravity", "settings"];
+        let order = ["peripherals", "audio", "system", "antigravity", "settings"];
         let oldTab = this._activeTab;
         let oldIdx = Math.max(0, order.indexOf(oldTab));
         let newIdx = Math.max(0, order.indexOf(newTabId));
@@ -2262,6 +2306,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         let tabs = [
             { id: "peripherals", label: "Perifericos", icon: "input-mouse-symbolic" },
             { id: "audio", label: "Áudio", icon: "audio-headphones-symbolic" },
+            { id: "system", label: "Sistema", icon: "utilities-system-monitor-symbolic" },
             { id: "antigravity", label: "Antigravity VU", icon: "applications-science-symbolic" },
             { id: "settings", label: "Ajustes", icon: "preferences-system-symbolic" },
         ];
@@ -3214,6 +3259,266 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     body.add_child(appBox);
                 }
             }
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    /* ======================================================================
+     * Tab: Sistema (Monitor de Sistema Nativo — FEAT-007)
+     * ====================================================================== */
+
+    _renderSystemTab() {
+        let sys = (this._data && this._data.system) || {};
+        let cpu = sys.cpu || {};
+        let gpu = sys.gpu || {};
+        let ram = sys.ram || {};
+        let disk = sys.disk || {};
+        let net = sys.network || sys.net || {};
+        let uptimeStr = sys.uptime_str || (sys.uptime && sys.uptime.uptime_str) || "";
+
+        let grid = new St.BoxLayout({
+            style_class: "dpi-bento-grid",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
+
+        // Left Column: CPU + GPU
+        let colLeft = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colLeft.add_child(this._buildCpuCard(cpu, uptimeStr));
+        colLeft.add_child(this._buildGpuCard(gpu));
+        grid.add_child(colLeft);
+
+        // Right Column: RAM + Disk & Net
+        let colRight = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        colRight.add_child(this._buildRamCard(ram));
+        colRight.add_child(this._buildDiskNetCard(disk, net));
+        grid.add_child(colRight);
+
+        this._bodyStack.add_child(grid);
+    }
+
+    _buildCpuCard(cpu, uptimeStr) {
+        let expanded = this._expandedCards.sys_cpu !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let rawCpu = cpu && (cpu.usage_pct !== undefined ? cpu.usage_pct : cpu.cpu_pct);
+        let cpuPct = clamp(Math.round(Number(rawCpu) || 0), 0, 100);
+        let tone = sysSeverityClass(cpuPct, 60, 85);
+        let tempVal = cpu ? (cpu.temp_c !== undefined ? cpu.temp_c : cpu.cpu_temp_c) : null;
+        let tempText = tempVal !== null && tempVal !== undefined
+            ? Math.round(Number(tempVal)) + "°C"
+            : null;
+        let tempTone = tempSeverityClass(tempVal);
+
+        let header = this._buildCardHeader({
+            cardKey: "sys_cpu",
+            icon: "computer-symbolic",
+            title: "Processador (CPU)",
+            badgeText: tempText,
+            badgeTone: tempTone,
+            metricText: cpuPct + "%",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "sys_cpu");
+
+            body.add_child(this._makeProgressBar(cpuPct, tone, null, 290));
+
+            let coresText = cpu && cpu.cores ? cpu.cores + " núcleos" : "";
+            let load1m = cpu && cpu.load_1m !== undefined ? "Load: " + Number(cpu.load_1m).toFixed(2) : "";
+            let detParts = [coresText, load1m].filter(Boolean);
+            if (uptimeStr) detParts.push("Uptime: " + uptimeStr);
+
+            let subLabel = new St.Label({
+                text: detParts.join(" · ") || "CPU Ativa",
+                style_class: "dpi-subtitle",
+            });
+            subLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            body.add_child(subLabel);
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    _buildGpuCard(gpu) {
+        let expanded = this._expandedCards.sys_gpu !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let rawGpu = gpu && (gpu.usage_pct !== undefined ? gpu.usage_pct : gpu.gpu_pct);
+        let gpuPct = clamp(Math.round(Number(rawGpu) || 0), 0, 100);
+        let tempVal = gpu ? (gpu.temp_c !== undefined ? gpu.temp_c : gpu.gpu_temp_c) : null;
+        let tempText = tempVal !== null && tempVal !== undefined
+            ? Math.round(Number(tempVal)) + "°C"
+            : null;
+        let tempTone = tempSeverityClass(tempVal);
+
+        let header = this._buildCardHeader({
+            cardKey: "sys_gpu",
+            icon: "video-display-symbolic",
+            title: "Placa Gráfica (GPU)",
+            badgeText: tempText,
+            badgeTone: tempTone,
+            metricText: gpuPct + "%",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "sys_gpu");
+
+            body.add_child(this._makeSectionLabel("USO DA GPU"));
+            body.add_child(this._makeProgressBar(gpuPct, sysSeverityClass(gpuPct, 70, 90), null, 290));
+
+            let vramUsed = Number(gpu && gpu.vram_used_gb) || 0;
+            let vramTotal = Number(gpu && gpu.vram_total_gb) || 0;
+            let vramPct = clamp(Math.round(Number(gpu && gpu.vram_pct) || 0), 0, 100);
+
+            body.add_child(this._makeSectionLabel("MEMÓRIA DE VÍDEO (VRAM)"));
+            let vramSubText = (vramTotal > 0 ? vramUsed.toFixed(1) + " / " + vramTotal.toFixed(1) + " GB · " : "") + vramPct + "%";
+            let vramLabel = new St.Label({
+                text: vramSubText,
+                style_class: "dpi-subtitle",
+            });
+            body.add_child(vramLabel);
+            body.add_child(this._makeProgressBar(vramPct, sysSeverityClass(vramPct, 75, 90), null, 290));
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    _buildRamCard(ram) {
+        let expanded = this._expandedCards.sys_ram !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let rawRam = ram && (ram.used_pct !== undefined ? ram.used_pct : ram.ram_pct);
+        let ramPct = clamp(Math.round(Number(rawRam) || 0), 0, 100);
+        let ramUsed = Number(ram && (ram.used_gb !== undefined ? ram.used_gb : ram.ram_used_gb)) || 0;
+        let ramTotal = Number(ram && (ram.total_gb !== undefined ? ram.total_gb : ram.ram_total_gb)) || 0;
+
+        let badgeStr = ramTotal > 0 ? ramUsed.toFixed(1) + " GB" : null;
+
+        let header = this._buildCardHeader({
+            cardKey: "sys_ram",
+            icon: "drive-harddisk-symbolic",
+            title: "Memória RAM",
+            badgeText: badgeStr,
+            badgeTone: "info",
+            metricText: ramPct + "%",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "sys_ram");
+
+            let ramSubText = (ramTotal > 0 ? ramUsed.toFixed(1) + " / " + ramTotal.toFixed(1) + " GB · " : "") + ramPct + "% em uso";
+            let subLabel = new St.Label({
+                text: ramSubText,
+                style_class: "dpi-subtitle",
+            });
+            body.add_child(subLabel);
+            body.add_child(this._makeProgressBar(ramPct, sysSeverityClass(ramPct, 70, 88), null, 290));
+
+            card.add_child(body);
+        }
+
+        return card;
+    }
+
+    _buildDiskNetCard(disk, net) {
+        let expanded = this._expandedCards.sys_disk_net !== false;
+        let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
+
+        let rawDisk = disk && (disk.used_pct !== undefined ? disk.used_pct : disk.disk_pct);
+        let diskPct = clamp(Math.round(Number(rawDisk) || 0), 0, 100);
+        let iface = (net && net.interface) || (disk && disk.path) || "/";
+
+        let header = this._buildCardHeader({
+            cardKey: "sys_disk_net",
+            icon: "network-workgroup-symbolic",
+            title: "Armazenamento & Rede",
+            badgeText: iface,
+            badgeTone: "info",
+            metricText: diskPct + "%",
+            expanded: expanded,
+        });
+        card.add_child(header);
+
+        if (expanded) {
+            let body = new St.BoxLayout({ vertical: true, style_class: "dpi-card-body", style: "spacing: 8px;", x_expand: true });
+            this._animateCardBody(body, "sys_disk_net");
+
+            // Disk Section
+            let mountPoint = (disk && (disk.path || disk.mount_point)) || "/";
+            body.add_child(this._makeSectionLabel("DISCO PRINCIPAL (" + mountPoint + ")"));
+
+            let dUsed = Number(disk && (disk.used_gb !== undefined ? disk.used_gb : disk.disk_used_gb)) || 0;
+            let dTotal = Number(disk && (disk.total_gb !== undefined ? disk.total_gb : disk.disk_total_gb)) || 0;
+            let dSub = (dTotal > 0 ? dUsed.toFixed(0) + " / " + dTotal.toFixed(0) + " GB · " : "") + diskPct + "%";
+            let dTemp = disk && (disk.temp_c !== undefined ? disk.temp_c : (disk.nvme_temp_c !== undefined ? disk.nvme_temp_c : disk.disk_temp_c));
+            if (dTemp !== null && dTemp !== undefined) {
+                dSub += " · NVMe: " + Math.round(Number(dTemp)) + "°C";
+            }
+            body.add_child(new St.Label({ text: dSub, style_class: "dpi-subtitle" }));
+            body.add_child(this._makeProgressBar(diskPct, sysSeverityClass(diskPct, 80, 92), null, 290));
+
+            // Network Section
+            body.add_child(this._makeSectionLabel("REDE EM TEMPO REAL (" + iface + ")"));
+            let netRow = new St.BoxLayout({ style: "spacing: 12px;", x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+
+            // Download
+            let rxBox = new St.BoxLayout({ style: "spacing: 4px;", y_align: Clutter.ActorAlign.CENTER });
+            rxBox.add_child(new St.Icon({
+                icon_name: "network-receive-symbolic",
+                icon_type: St.IconType.SYMBOLIC,
+                icon_size: 13,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            rxBox.add_child(new St.Label({
+                text: (net && net.rx_text) || "0 KB/s",
+                style_class: "dpi-card-metric",
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            netRow.add_child(rxBox);
+
+            // Upload
+            let txBox = new St.BoxLayout({ style: "spacing: 4px;", y_align: Clutter.ActorAlign.CENTER });
+            txBox.add_child(new St.Icon({
+                icon_name: "network-transmit-symbolic",
+                icon_type: St.IconType.SYMBOLIC,
+                icon_size: 13,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            txBox.add_child(new St.Label({
+                text: (net && net.tx_text) || "0 KB/s",
+                style_class: "dpi-card-metric",
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            netRow.add_child(txBox);
+
+            body.add_child(netRow);
 
             card.add_child(body);
         }

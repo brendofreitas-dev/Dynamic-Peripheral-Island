@@ -2204,6 +2204,25 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             this._syncCapsuleOpenState();
             if (isOpen) {
                 this._renderPopover();
+                // Isle-style native spring physics drop-down from the TopBar Notch
+                if (this._popoverRoot) {
+                    this._popoverRoot.remove_all_transitions();
+                    if (typeof this._popoverRoot.set_pivot_point === "function") {
+                        try { this._popoverRoot.set_pivot_point(0.5, 0.0); } catch (e) {}
+                    }
+                    this._popoverRoot.opacity = 140;
+                    this._popoverRoot.scale_x = 0.96;
+                    this._popoverRoot.scale_y = 0.90;
+                    this._popoverRoot.translation_y = -14;
+                    this._popoverRoot.ease({
+                        opacity: 255,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                        translation_y: 0,
+                        duration: 380,
+                        mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                    });
+                }
             }
         });
 
@@ -3072,6 +3091,53 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._bodyStack.add_child(grid);
     }
 
+    _dispatchMprisDirect(methodName, toastMsg) {
+        let media = (this._data && this._data.media) || {};
+        let busName = media.bus_name || "org.mpris.MediaPlayer2.spotify";
+
+        // Optimistic UI update (0ms instant feedback)
+        if (methodName === "PlayPause" && this._data && this._data.media) {
+            this._data.media.status = this._data.media.status === "Playing" ? "Paused" : "Playing";
+            if (this.menu && this.menu.isOpen && this._activeTab === "audio") {
+                this._renderActiveTabBody();
+            }
+        }
+        if (toastMsg) {
+            this._showToast(toastMsg, "info");
+        }
+
+        try {
+            Gio.DBus.session.call(
+                busName,
+                "/org/mpris/MediaPlayer2",
+                "org.mpris.MediaPlayer2.Player",
+                methodName,
+                null,
+                null,
+                Gio.DBusCallFlags.NONE,
+                1000,
+                null,
+                (conn, res) => {
+                    try {
+                        conn.call_finish(res);
+                    } catch (e) {
+                        // Fallback to CLI if direct D-Bus fails
+                        let flag = methodName === "Next" ? "--media-next" : (methodName === "Previous" ? "--media-prev" : "--media-play-pause");
+                        this._dispatchCliAction([flag], null);
+                    }
+                    // Quick refresh to fetch new track metadata & cover art
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 280, () => {
+                        if (!this._destroyed) this._pollTelemetry();
+                        return GLib.SOURCE_REMOVE;
+                    });
+                }
+            );
+        } catch (e) {
+            let flag = methodName === "Next" ? "--media-next" : (methodName === "Previous" ? "--media-prev" : "--media-play-pause");
+            this._dispatchCliAction([flag], toastMsg);
+        }
+    }
+
     _buildMediaPlayerCard(media) {
         let expanded = this._expandedCards.media !== false;
         let card = new St.BoxLayout({ vertical: true, style_class: "dpi-card", x_expand: true });
@@ -3197,20 +3263,20 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                     "media-skip-backward-symbolic",
                     "",
                     null,
-                    () => this._dispatchCliAction(["--media-prev"], "Faixa anterior...")
+                    () => this._dispatchMprisDirect("Previous", "Faixa anterior")
                 );
                 let playPauseIcon = isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic";
                 let playPauseBtn = this._makeActionButton(
                     playPauseIcon,
                     "",
                     "primary",
-                    () => this._dispatchCliAction(["--media-play-pause"], "Play/Pause...")
+                    () => this._dispatchMprisDirect("PlayPause", isPlaying ? "Pausado" : "Tocando")
                 );
                 let nextBtn = this._makeActionButton(
                     "media-skip-forward-symbolic",
                     "",
                     null,
-                    () => this._dispatchCliAction(["--media-next"], "Próxima faixa...")
+                    () => this._dispatchMprisDirect("Next", "Próxima faixa")
                 );
 
                 controlsRow.add_child(prevBtn);
@@ -4156,7 +4222,16 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         sysCard.add_child(this._makeChipRow(
             THEME_MODE_OPTIONS.map((t) => ({ label: t.label, value: t.id })),
             settings.theme_mode || "auto",
-            (mode) => this._dispatchCliAction(["--set-theme", mode], "Tema alterado para " + mode)
+            (mode) => {
+                if (this._data) {
+                    if (!this._data.settings) this._data.settings = {};
+                    this._data.settings.theme_mode = mode;
+                }
+                this._applyTheme();
+                this._applyNotchStyle();
+                if (this.menu && this.menu.isOpen) this._renderPopover();
+                this._dispatchCliAction(["--set-theme", mode], "Tema alterado para " + mode);
+            }
         ));
 
         sysCard.add_child(this._makeSectionLabel("ESTILO DO NOTCH"));
@@ -4164,10 +4239,12 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             NOTCH_STYLE_OPTIONS.map((s) => ({ label: s.label, value: s.id })),
             settings.notch_style || "obsidian",
             (style) => {
-                if (this._data && this._data.settings) {
+                if (this._data) {
+                    if (!this._data.settings) this._data.settings = {};
                     this._data.settings.notch_style = style;
                 }
                 this._applyNotchStyle();
+                if (this.menu && this.menu.isOpen) this._renderPopover();
                 this._dispatchCliAction(["--set-notch-style", style], "Estilo do Notch: " + style);
             }
         ));

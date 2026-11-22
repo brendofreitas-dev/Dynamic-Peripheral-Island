@@ -326,6 +326,38 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._applyNotchStyle();
     }
 
+    _buildNotchInlineStyle(style, isLight, isActive) {
+        if (style === "glass") {
+            if (isLight) {
+                return isActive
+                    ? "background-gradient-direction: none; background-color: rgba(255, 255, 255, 0.82); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); border-bottom: 1px solid rgba(147, 51, 234, 0.50); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #0F172A;"
+                    : "background-gradient-direction: none; background-color: rgba(248, 250, 252, 0.62); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); border-bottom: 1px solid rgba(15, 23, 42, 0.16); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #0F172A;";
+            }
+            return isActive
+                ? "background-gradient-direction: none; background-color: rgba(30, 32, 46, 0.72); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); border-bottom: 1px solid rgba(189, 147, 249, 0.65); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #F8FAFC;"
+                : "background-gradient-direction: none; background-color: rgba(24, 26, 38, 0.58); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); border-bottom: 1px solid rgba(255, 255, 255, 0.22); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #F8FAFC;";
+        }
+        if (style === "pill") {
+            if (isLight) {
+                return isActive
+                    ? "background-gradient-direction: none; background-color: rgba(255, 255, 255, 0.98); border: 1px solid rgba(147, 51, 234, 0.45); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); border-radius: 999px; margin: 2px 0; padding: 0 18px; color: #0F172A;"
+                    : "background-gradient-direction: none; background-color: rgba(248, 250, 252, 0.90); border: 1px solid rgba(15, 23, 42, 0.14); box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12); border-radius: 999px; margin: 2px 0; padding: 0 14px; color: #0F172A;";
+            }
+            return isActive
+                ? "background-gradient-direction: none; background-color: rgba(24, 26, 38, 0.96); border: 1px solid rgba(189, 147, 249, 0.55); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); border-radius: 999px; margin: 2px 0; padding: 0 18px; color: #F8FAFC;"
+                : "background-gradient-direction: none; background-color: rgba(18, 20, 30, 0.88); border: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); border-radius: 999px; margin: 2px 0; padding: 0 14px; color: #F8FAFC;";
+        }
+        // Default: obsidian (Notch Sólido)
+        if (isLight) {
+            return isActive
+                ? "background-gradient-direction: none; background-color: rgba(255, 255, 255, 0.98); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); border-bottom: 1px solid rgba(147, 51, 234, 0.45); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #0F172A;"
+                : "background-gradient-direction: none; background-color: #f1f5f9; border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); border-bottom: 1px solid rgba(15, 23, 42, 0.14); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #0F172A;";
+        }
+        return isActive
+            ? "background-gradient-direction: none; background-color: rgba(18, 20, 30, 0.98); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(189, 147, 249, 0.55); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.50); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #F8FAFC;"
+            : "background-gradient-direction: none; background-color: #0b0c12; border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #F8FAFC;";
+    }
+
     _applyNotchStyle() {
         let settings = (this._data && this._data.settings) || {};
         let style = settings.notch_style || "obsidian";
@@ -334,18 +366,39 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             style = "obsidian";
         }
         let targetClass = "dpi-notch-" + style;
+        let isLight = this._resolvedTheme === "light";
 
-        let targets = [this._unifiedCenterBox, this.actor].filter(Boolean);
-        for (let target of targets) {
+        if (this._unifiedCenterBox) {
             try {
                 for (let s of validStyles) {
                     let cls = "dpi-notch-" + s;
                     if (cls === targetClass) {
-                        target.add_style_class_name(cls);
+                        this._unifiedCenterBox.add_style_class_name(cls);
                     } else {
-                        target.remove_style_class_name(cls);
+                        this._unifiedCenterBox.remove_style_class_name(cls);
+                    }
+                    this.actor.remove_style_class_name(cls);
+                }
+                let isActive = this._unifiedCenterBox.has_style_class_name("dpi-capsule-hovered")
+                    || this._unifiedCenterBox.has_style_class_name("dpi-capsule-open");
+                this._unifiedCenterBox.set_style(this._buildNotchInlineStyle(style, isLight, isActive));
+                this.actor.set_style(null);
+            } catch (e) {
+                // ignore
+            }
+        } else if (this.actor) {
+            try {
+                for (let s of validStyles) {
+                    let cls = "dpi-notch-" + s;
+                    if (cls === targetClass) {
+                        this.actor.add_style_class_name(cls);
+                    } else {
+                        this.actor.remove_style_class_name(cls);
                     }
                 }
+                let isActive = this.actor.has_style_class_name("dpi-capsule-hovered")
+                    || this.actor.has_style_class_name("dpi-capsule-open");
+                this.actor.set_style(this._buildNotchInlineStyle(style, isLight, isActive));
             } catch (e) {
                 // ignore
             }
@@ -559,6 +612,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (isEntering) {
             this._hoverCounter = (this._hoverCounter || 0) + 1;
             box.add_style_class_name("dpi-capsule-hovered");
+            this._applyNotchStyle();
         } else {
             this._hoverCounter = Math.max(0, (this._hoverCounter || 0) - 1);
 
@@ -577,6 +631,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 let alertActive = Boolean(this._morphPill && this._morphPill.visible);
                 if (!anyHover && this._hoverCounter <= 0 && !menuOpen && !alertActive) {
                     box.remove_style_class_name("dpi-capsule-hovered");
+                    this._applyNotchStyle();
                 }
                 return GLib.SOURCE_REMOVE;
             });
@@ -593,6 +648,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         } else {
             box.remove_style_class_name("dpi-capsule-open");
         }
+        this._applyNotchStyle();
     }
 
     _attachUnifiedCapsule() {
@@ -803,6 +859,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._unifiedCenterBox.remove_style_class_name("dpi-notch-obsidian");
                 this._unifiedCenterBox.remove_style_class_name("dpi-notch-glass");
                 this._unifiedCenterBox.remove_style_class_name("dpi-notch-pill");
+                this._unifiedCenterBox.set_style(null);
             } catch (e) {
                 // actor might already be disposed during panel teardown
             }

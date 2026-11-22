@@ -565,10 +565,13 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_buildDiskNetCard(", src)
         self.assertIn('["peripherals", "audio", "system", "focus", "antigravity", "settings"]', src)
 
-        # UX-016: 100% GPU transition (duration: 280, EASE_OUT_CUBIC, opacity: 150) without white flash
+        # UX-016 / v1.4.0: 100% GPU Isle-style fluid transition (duration: 420, EASE_OUT_CUBIC, opacity: 120)
         self.assertIn("Clutter.AnimationMode.EASE_OUT_CUBIC", src)
-        self.assertIn("duration: 280", src)
-        self.assertIn("this._bodyStack.opacity = 150;", src)
+        self.assertIn("duration: 420", src)
+        self.assertIn("this._bodyStack.opacity = 120;", src)
+        self.assertIn("_renderFocusTab()", src)
+        self.assertIn("_detectLiveOsdAlerts(", src)
+        self.assertIn("_startClipboardWatcher()", src)
         self.assertIn("this._tabHoverTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 110,", src)
 
         # UX-017 & UX-018: Animated LiquidGlass Tooltip and True Apple Notch TopBar

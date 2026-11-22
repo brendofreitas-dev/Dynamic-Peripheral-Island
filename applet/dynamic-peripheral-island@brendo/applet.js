@@ -654,18 +654,6 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._hoverEnterTimerId);
             this._hoverEnterTimerId = 0;
         }
-        if (this._focusTimerId) {
-            GLib.source_remove(this._focusTimerId);
-            this._focusTimerId = 0;
-        }
-        if (this._clipboardTimerId) {
-            GLib.source_remove(this._clipboardTimerId);
-            this._clipboardTimerId = 0;
-        }
-        if (this._hoverEnterTimerId) {
-            GLib.source_remove(this._hoverEnterTimerId);
-            this._hoverEnterTimerId = 0;
-        }
 
         if (isEntering) {
             this._hoverCounter = (this._hoverCounter || 0) + 1;
@@ -896,14 +884,6 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (this._hoverEnterTimerId) {
             GLib.source_remove(this._hoverEnterTimerId);
             this._hoverEnterTimerId = 0;
-        }
-        if (this._focusTimerId) {
-            GLib.source_remove(this._focusTimerId);
-            this._focusTimerId = 0;
-        }
-        if (this._clipboardTimerId) {
-            GLib.source_remove(this._clipboardTimerId);
-            this._clipboardTimerId = 0;
         }
 
         for (let s of this._hoverSignals) {

@@ -561,7 +561,7 @@ class MediaPlayerManager:
         # Title & Album
         title = str(meta.get("xesam:title", "") or "")
         album = str(meta.get("xesam:album", "") or "")
-        art_url = str(meta.get("mpris:artUrl", "") or "")
+        art_url = self._resolve_local_art_url(str(meta.get("mpris:artUrl", "") or ""))
 
         # Length & Position in seconds (MPRIS values are microseconds)
         raw_len = meta.get("mpris:length", 0)
@@ -591,6 +591,38 @@ class MediaPlayerManager:
             "can_play": bool(d.get("CanPlay", False)),
             "can_pause": bool(d.get("CanPause", False)),
         }
+
+    @staticmethod
+    def _resolve_local_art_url(art_url: str) -> str:
+        """Cache remote http(s) MPRIS album art locally so Cinnamon St.Icon can render it."""
+        if not art_url or art_url.startswith("file://"):
+            return art_url
+        if not (art_url.startswith("http://") or art_url.startswith("https://")):
+            return art_url
+        try:
+            import hashlib
+            import tempfile
+            import urllib.request
+            from pathlib import Path
+
+            cache_dir = Path(tempfile.gettempdir()) / "dpi-album-art"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha1(art_url.encode("utf-8")).hexdigest()
+            dest = cache_dir / f"{digest}.img"
+            if not dest.exists() or dest.stat().st_size == 0:
+                req = urllib.request.Request(
+                    art_url,
+                    headers={"User-Agent": "DynamicPeripheralIsland/1.4"},
+                )
+                with urllib.request.urlopen(req, timeout=1.5) as resp:
+                    data = resp.read(2 * 1024 * 1024)
+                if data:
+                    dest.write_bytes(data)
+            if dest.exists() and dest.stat().st_size > 0:
+                return dest.as_uri()
+        except Exception:
+            pass
+        return art_url
 
     # -----------------------------------------------------------------------
     # Transport Controls

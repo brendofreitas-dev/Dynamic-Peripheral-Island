@@ -174,7 +174,20 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._toastTimerId = 0;
         this._idleAttachId = 0;
         this._hoverLeaveTimerId = 0;
+        this._hoverEnterTimerId = 0;
         this._hoverCounter = 0;
+        this._lastOsdVolume = null;
+        this._lastOsdMuted = null;
+        this._lastOsdCaps = null;
+        this._lastOsdTrack = null;
+        this._focusMode = "work";
+        this._focusTotalSec = 25 * 60;
+        this._focusRemainingSec = 25 * 60;
+        this._focusRunning = false;
+        this._focusTimerId = 0;
+        this._clipboardHistory = [];
+        this._lastClipboardText = "";
+        this._clipboardTimerId = 0;
         this._isPolling = false;
         this._prewarmed = false;
         this._destroyed = false;
@@ -490,6 +503,35 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         });
         this.actor.add_child(this._morphPill);
 
+        // Live Focus Timer pill (shown inside Notch when Pomodoro is running)
+        this._focusPill = new St.BoxLayout({
+            style_class: "dpi-morph-pill dpi-morph-swarm",
+            y_align: Clutter.ActorAlign.CENTER,
+            reactive: true,
+        });
+        this._focusPillIcon = new St.Icon({
+            icon_name: "alarm-symbolic",
+            icon_type: St.IconType.SYMBOLIC,
+            icon_size: 12,
+        });
+        this._focusPillLabel = new St.Label({
+            text: "25:00",
+            style_class: "dpi-morph-label",
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._focusPill.add_child(this._focusPillIcon);
+        this._focusPill.add_child(this._focusPillLabel);
+        this._focusPill.hide();
+        this._focusPill.connect("button-press-event", (actor, event) => {
+            if (event.get_button() === 1) {
+                this._openPopoverOnTab("focus");
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this.actor.add_child(this._focusPill);
+        this._startClipboardWatcher();
+
         this._renderTopBarPlaceholder();
     }
 
@@ -608,11 +650,34 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
         }
+        if (this._hoverEnterTimerId) {
+            GLib.source_remove(this._hoverEnterTimerId);
+            this._hoverEnterTimerId = 0;
+        }
+        if (this._focusTimerId) {
+            GLib.source_remove(this._focusTimerId);
+            this._focusTimerId = 0;
+        }
+        if (this._clipboardTimerId) {
+            GLib.source_remove(this._clipboardTimerId);
+            this._clipboardTimerId = 0;
+        }
+        if (this._hoverEnterTimerId) {
+            GLib.source_remove(this._hoverEnterTimerId);
+            this._hoverEnterTimerId = 0;
+        }
 
         if (isEntering) {
             this._hoverCounter = (this._hoverCounter || 0) + 1;
-            box.add_style_class_name("dpi-capsule-hovered");
-            this._applyNotchStyle();
+            // Isle-style smart hover dwell (120ms): ignores accidental fast cursor pass-throughs
+            this._hoverEnterTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+                this._hoverEnterTimerId = 0;
+                if (!this._destroyed && this._hoverCounter > 0) {
+                    box.add_style_class_name("dpi-capsule-hovered");
+                    this._applyNotchStyle();
+                }
+                return GLib.SOURCE_REMOVE;
+            });
         } else {
             this._hoverCounter = Math.max(0, (this._hoverCounter || 0) - 1);
 
@@ -828,6 +893,18 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
         }
+        if (this._hoverEnterTimerId) {
+            GLib.source_remove(this._hoverEnterTimerId);
+            this._hoverEnterTimerId = 0;
+        }
+        if (this._focusTimerId) {
+            GLib.source_remove(this._focusTimerId);
+            this._focusTimerId = 0;
+        }
+        if (this._clipboardTimerId) {
+            GLib.source_remove(this._clipboardTimerId);
+            this._clipboardTimerId = 0;
+        }
 
         for (let s of this._hoverSignals) {
             try {
@@ -910,6 +987,18 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         if (this._hoverLeaveTimerId) {
             GLib.source_remove(this._hoverLeaveTimerId);
             this._hoverLeaveTimerId = 0;
+        }
+        if (this._hoverEnterTimerId) {
+            GLib.source_remove(this._hoverEnterTimerId);
+            this._hoverEnterTimerId = 0;
+        }
+        if (this._focusTimerId) {
+            GLib.source_remove(this._focusTimerId);
+            this._focusTimerId = 0;
+        }
+        if (this._clipboardTimerId) {
+            GLib.source_remove(this._clipboardTimerId);
+            this._clipboardTimerId = 0;
         }
         if (this._repositionIdleId) {
             GLib.source_remove(this._repositionIdleId);
@@ -1126,6 +1215,301 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
     }
 
+    _detectLiveOsdAlerts(data) {
+        if (!data || this._destroyed) return;
+        let menuOpen = Boolean(this.menu && this.menu.isOpen);
+
+        // 1. Master volume / mute OSD
+        let audio = data.audio || {};
+        let vol = typeof audio.master_volume === "number" ? audio.master_volume : null;
+        let muted = typeof audio.master_muted === "boolean" ? audio.master_muted : null;
+        if (this._lastOsdVolume !== null && vol !== null && (vol !== this._lastOsdVolume || muted !== this._lastOsdMuted)) {
+            if (!menuOpen) {
+                this._showMorphAlert({
+                    type: "volume_changed",
+                    muted: Boolean(muted),
+                    message: muted ? "Áudio silenciado" : ("Volume " + vol + "%"),
+                });
+            }
+        }
+        if (vol !== null) this._lastOsdVolume = vol;
+        if (muted !== null) this._lastOsdMuted = muted;
+
+        // 2. Caps Lock OSD
+        let kbd = (data.peripherals && data.peripherals.keyboard) || {};
+        let leds = kbd.leds || {};
+        let caps = typeof leds.caps_lock === "boolean" ? leds.caps_lock : null;
+        if (this._lastOsdCaps !== null && caps !== null && caps !== this._lastOsdCaps) {
+            if (!menuOpen) {
+                this._showMorphAlert({
+                    type: "caps_lock",
+                    active: caps,
+                    message: caps ? "Caps Lock ATIVADO" : "Caps Lock desativado",
+                });
+            }
+        }
+        if (caps !== null) this._lastOsdCaps = caps;
+
+        // 3. Track changed OSD
+        let media = data.media || {};
+        let trackTitle = (media.available && media.status === "Playing" && media.title) ? String(media.title) : null;
+        if (this._lastOsdTrack !== null && trackTitle && trackTitle !== this._lastOsdTrack) {
+            if (!menuOpen) {
+                this._showMorphAlert({
+                    type: "track_changed",
+                    message: trackTitle,
+                });
+            }
+        }
+        if (trackTitle) this._lastOsdTrack = trackTitle;
+    }
+
+    _startClipboardWatcher() {
+        if (this._clipboardTimerId) {
+            GLib.source_remove(this._clipboardTimerId);
+            this._clipboardTimerId = 0;
+        }
+        this._clipboardTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT_IDLE, 2, () => {
+            if (this._destroyed) return GLib.SOURCE_REMOVE;
+            try {
+                let cb = St.Clipboard.get_default();
+                cb.get_text(St.ClipboardType.CLIPBOARD, (clipboard, text) => {
+                    if (this._destroyed || !text) return;
+                    let trimmed = String(text).trim();
+                    if (!trimmed || trimmed === this._lastClipboardText) return;
+                    this._lastClipboardText = trimmed;
+                    this._clipboardHistory = this._clipboardHistory.filter(item => item !== trimmed);
+                    this._clipboardHistory.unshift(trimmed);
+                    if (this._clipboardHistory.length > 10) {
+                        this._clipboardHistory = this._clipboardHistory.slice(0, 10);
+                    }
+                    if (this.menu && this.menu.isOpen && this._activeTab === "focus") {
+                        this._renderActiveTabBody();
+                    }
+                });
+            } catch (e) {
+                // ignore clipboard errors
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _setFocusPreset(mode, minutes) {
+        this._focusMode = mode;
+        this._focusTotalSec = minutes * 60;
+        this._focusRemainingSec = this._focusTotalSec;
+        this._stopFocusInterval();
+        this._focusRunning = false;
+        this._syncFocusPill();
+        if (this._activeTab === "focus") {
+            this._renderActiveTabBody();
+        }
+    }
+
+    _stopFocusInterval() {
+        if (this._focusTimerId) {
+            GLib.source_remove(this._focusTimerId);
+            this._focusTimerId = 0;
+        }
+    }
+
+    _toggleFocusTimer() {
+        if (this._focusRunning) {
+            this._focusRunning = false;
+            this._stopFocusInterval();
+        } else {
+            if (this._focusRemainingSec <= 0) {
+                this._focusRemainingSec = this._focusTotalSec;
+            }
+            this._focusRunning = true;
+            this._stopFocusInterval();
+            this._focusTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                if (this._destroyed || !this._focusRunning) {
+                    this._focusTimerId = 0;
+                    return GLib.SOURCE_REMOVE;
+                }
+                this._focusRemainingSec = Math.max(0, this._focusRemainingSec - 1);
+                this._syncFocusPill();
+                if (this.menu && this.menu.isOpen && this._activeTab === "focus") {
+                    this._renderActiveTabBody();
+                }
+                if (this._focusRemainingSec <= 0) {
+                    this._focusRunning = false;
+                    this._focusTimerId = 0;
+                    this._syncFocusPill();
+                    this._showMorphAlert({
+                        type: "pomodoro_done",
+                        message: this._focusMode === "work" ? "Foco concluído! Hora da pausa" : "Pausa encerrada!",
+                    });
+                    return GLib.SOURCE_REMOVE;
+                }
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+        this._syncFocusPill();
+        if (this._activeTab === "focus") {
+            this._renderActiveTabBody();
+        }
+    }
+
+    _syncFocusPill() {
+        if (!this._focusPill || !this._focusPillLabel) return;
+        let mm = Math.floor(this._focusRemainingSec / 60);
+        let ss = this._focusRemainingSec % 60;
+        let formatted = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
+        this._focusPillLabel.set_text(formatted);
+        if (this._focusRunning) {
+            this._focusPill.show();
+        } else {
+            this._focusPill.hide();
+        }
+    }
+
+    _renderFocusTab() {
+        let grid = new St.BoxLayout({
+            style_class: "dpi-bento-grid",
+            style: "spacing: 10px;",
+            x_expand: true,
+        });
+
+        // Left Column: Focus Timer (Pomodoro)
+        let colLeft = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        let timerCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", style: "spacing: 10px; padding: 12px;", x_expand: true });
+        let timerHeader = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
+        timerHeader.add_child(new St.Icon({ icon_name: "alarm-symbolic", icon_type: St.IconType.SYMBOLIC, icon_size: 14 }));
+        timerHeader.add_child(new St.Label({ text: "FOCUS TIMER (POMODORO)", style_class: "dpi-section-title", x_expand: true }));
+        let modeBadge = new St.Label({
+            text: this._focusRunning ? "Ativo" : "Pausado",
+            style_class: this._focusRunning ? "dpi-badge dpi-badge-ok" : "dpi-badge dpi-badge-muted",
+        });
+        timerHeader.add_child(modeBadge);
+        timerCard.add_child(timerHeader);
+
+        let mm = Math.floor(this._focusRemainingSec / 60);
+        let ss = this._focusRemainingSec % 60;
+        let timeStr = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
+        let bigClock = new St.Label({
+            text: timeStr,
+            style: "font-family: 'Fira Code', monospace; font-size: 32px; font-weight: 700; padding: 4px 0;",
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+        timerCard.add_child(bigClock);
+
+        // Progress bar
+        let pct = this._focusTotalSec > 0 ? Math.round(((this._focusTotalSec - this._focusRemainingSec) / this._focusTotalSec) * 100) : 0;
+        let barBg = new St.Bin({ style_class: "dpi-progress-bg", x_expand: true });
+        let barFill = new St.Bin({
+            style_class: "dpi-progress-fill dpi-progress-ok",
+            style: "width: " + Math.max(4, Math.round((pct / 100) * 308)) + "px;",
+        });
+        barBg.set_child(barFill);
+        timerCard.add_child(barBg);
+
+        // Presets row
+        let presetsRow = new St.BoxLayout({ style: "spacing: 6px;", x_expand: true });
+        let presets = [
+            { mode: "work", label: "25m Foco", mins: 25 },
+            { mode: "short", label: "5m Pausa", mins: 5 },
+            { mode: "long", label: "15m Longa", mins: 15 },
+        ];
+        for (let p of presets) {
+            let pBtn = new St.Button({
+                label: p.label,
+                style_class: this._focusMode === p.mode ? "dpi-chip dpi-chip-active" : "dpi-chip",
+                x_expand: true,
+                can_focus: true,
+            });
+            pBtn.connect("clicked", () => this._setFocusPreset(p.mode, p.mins));
+            presetsRow.add_child(pBtn);
+        }
+        timerCard.add_child(presetsRow);
+
+        // Start / Pause & Reset controls
+        let ctrlRow = new St.BoxLayout({ style: "spacing: 8px;", x_expand: true });
+        let toggleBtn = new St.Button({
+            label: this._focusRunning ? "Pausar" : "Iniciar Foco",
+            style_class: "dpi-chip dpi-chip-active",
+            x_expand: true,
+            can_focus: true,
+        });
+        toggleBtn.connect("clicked", () => this._toggleFocusTimer());
+        let resetBtn = new St.Button({
+            label: "Resetar",
+            style_class: "dpi-chip",
+            can_focus: true,
+        });
+        resetBtn.connect("clicked", () => {
+            let mins = this._focusMode === "short" ? 5 : (this._focusMode === "long" ? 15 : 25);
+            this._setFocusPreset(this._focusMode, mins);
+        });
+        ctrlRow.add_child(toggleBtn);
+        ctrlRow.add_child(resetBtn);
+        timerCard.add_child(ctrlRow);
+        colLeft.add_child(timerCard);
+        grid.add_child(colLeft);
+
+        // Right Column: Clipboard History
+        let colRight = new St.BoxLayout({
+            vertical: true,
+            style_class: "dpi-bento-col",
+            style: "spacing: 8px; width: 336px;",
+            x_expand: false,
+        });
+        let cbCard = new St.BoxLayout({ vertical: true, style_class: "dpi-card", style: "spacing: 8px; padding: 12px;", x_expand: true });
+        let cbHeader = new St.BoxLayout({ style: "spacing: 6px;", y_align: Clutter.ActorAlign.CENTER });
+        cbHeader.add_child(new St.Icon({ icon_name: "edit-paste-symbolic", icon_type: St.IconType.SYMBOLIC, icon_size: 14 }));
+        cbHeader.add_child(new St.Label({ text: "CLIPBOARD (" + this._clipboardHistory.length + ")", style_class: "dpi-section-title", x_expand: true }));
+        if (this._clipboardHistory.length > 0) {
+            let clearBtn = new St.Button({ label: "Limpar", style_class: "dpi-chip", can_focus: true });
+            clearBtn.connect("clicked", () => {
+                this._clipboardHistory = [];
+                this._renderActiveTabBody();
+            });
+            cbHeader.add_child(clearBtn);
+        }
+        cbCard.add_child(cbHeader);
+
+        if (this._clipboardHistory.length === 0) {
+            cbCard.add_child(new St.Label({
+                text: "Copie qualquer texto ou comando — ele aparecerá aqui automaticamente.",
+                style_class: "dpi-subtitle",
+            }));
+        } else {
+            let maxItems = Math.min(6, this._clipboardHistory.length);
+            for (let i = 0; i < maxItems; i++) {
+                let rawText = this._clipboardHistory[i];
+                let preview = rawText.replace(/\s+/g, " ");
+                if (preview.length > 42) preview = preview.slice(0, 39) + "...";
+                let itemBtn = new St.Button({
+                    label: preview,
+                    style_class: "dpi-chip",
+                    x_expand: true,
+                    x_align: St.Align.START,
+                    can_focus: true,
+                });
+                itemBtn.connect("clicked", () => {
+                    try {
+                        St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, rawText);
+                        this._lastClipboardText = rawText;
+                        this._showToast("Copiado para a área de transferência", "ok");
+                    } catch (e) {
+                        // ignore
+                    }
+                });
+                cbCard.add_child(itemBtn);
+            }
+        }
+        colRight.add_child(cbCard);
+        grid.add_child(colRight);
+
+        this._bodyStack.add_child(grid);
+    }
+
     _showMorphAlert(alert) {
         if (this._destroyed || !this._morphPill) return;
 
@@ -1156,6 +1540,22 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             toneClass = "dpi-morph-warn";
             iconName = "applications-science-symbolic";
             this._morphAlertTab = "antigravity";
+        } else if (t === "volume_changed") {
+            toneClass = "dpi-morph-info";
+            iconName = alert.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
+            this._morphAlertTab = "audio";
+        } else if (t === "caps_lock") {
+            toneClass = alert.active ? "dpi-morph-warn" : "dpi-morph-info";
+            iconName = "input-keyboard-symbolic";
+            this._morphAlertTab = "peripherals";
+        } else if (t === "track_changed") {
+            toneClass = "dpi-morph-ok";
+            iconName = "audio-x-generic-symbolic";
+            this._morphAlertTab = "audio";
+        } else if (t === "pomodoro_done") {
+            toneClass = "dpi-morph-ok";
+            iconName = "alarm-symbolic";
+            this._morphAlertTab = "focus";
         } else if (alert.severity === "critical") {
             toneClass = "dpi-morph-crit";
         }
@@ -1170,12 +1570,19 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         this._morphPill.remove_all_transitions();
         this._morphPill.opacity = 0;
+        this._morphPill.scale_x = 0.92;
+        this._morphPill.scale_y = 0.92;
+        if (typeof this._morphPill.set_pivot_point === "function") {
+            try { this._morphPill.set_pivot_point(0.5, 0.5); } catch (e) {}
+        }
         this._morphPill.show();
         this._syncCapsuleOpenState();
         this._morphPill.ease({
             opacity: 255,
-            duration: 240,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            duration: 320,
+            mode: Clutter.AnimationMode.EASE_OUT_BACK,
         });
 
         this._morphTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, MORPH_DURATION_MS, () => {
@@ -1279,6 +1686,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 this._applyTheme();
                 this._updateTopBar();
                 this._processAlerts(parsed.alerts || []);
+                this._detectLiveOsdAlerts(parsed);
 
                 if (!this._prewarmed) {
                     this._prewarmed = true;
@@ -1866,6 +2274,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             this._renderAudioTab();
         } else if (this._activeTab === "system") {
             this._renderSystemTab();
+        } else if (this._activeTab === "focus") {
+            this._renderFocusTab();
         } else if (this._activeTab === "antigravity") {
             this._renderAntigravityTab();
         } else {
@@ -1875,7 +2285,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
     _switchTab(newTabId, animate = true) {
         if (!this._popoverRoot) return;
-        let order = ["peripherals", "audio", "system", "antigravity", "settings"];
+        let order = ["peripherals", "audio", "system", "focus", "antigravity", "settings"];
         let oldTab = this._activeTab;
         let oldIdx = Math.max(0, order.indexOf(oldTab));
         let newIdx = Math.max(0, order.indexOf(newTabId));
@@ -1884,10 +2294,6 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._activeTab = newTabId;
         this._justExpandedCard = null;
 
-        // UX-016: Unified 700px Bento Grid layout across all 4 tabs.
-        // Dynamic width morphing (width: targetW, this.menu.actor.ease({ ... })) and duration: 420
-        // removed in favor of a fixed 700px width with 100% GPU-only composition (duration: 280, EASE_OUT_CUBIC, opacity: 150)
-        // to eliminate CPU relayout stutter, frame drops and white flash.
         this._syncPopoverWidth();
         this._syncSegmentHighlight();
         this._renderTabBar();
@@ -1896,11 +2302,10 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
 
         if (animate && this._bodyStack) {
             this._bodyStack.remove_all_transitions();
-            // Start at opacity: 150 (never 0) to eliminate white flash
-            this._bodyStack.opacity = 150;
-            this._bodyStack.scale_x = 0.99;
-            this._bodyStack.scale_y = 0.99;
-            this._bodyStack.translation_x = dir * 16;
+            this._bodyStack.opacity = 120;
+            this._bodyStack.scale_x = 0.985;
+            this._bodyStack.scale_y = 0.985;
+            this._bodyStack.translation_x = dir * 22;
 
             if (typeof this._bodyStack.set_pivot_point === "function") {
                 try {
@@ -1910,13 +2315,13 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
             }
 
-            // 100% GPU transition: Clutter.AnimationMode.EASE_OUT_CUBIC (evolved from EASE_OUT_QUINT and EASE_OUT_EXPO)
+            // Isle-style fluid GPU transition: 420ms EASE_OUT_CUBIC
             let easeParams = {
                 opacity: 255,
                 scale_x: 1.0,
                 scale_y: 1.0,
                 translation_x: 0,
-                duration: 280,
+                duration: 420,
                 mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             };
             try {
@@ -2018,6 +2423,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
             { id: "peripherals", label: "Perifericos", icon: "input-mouse-symbolic" },
             { id: "audio", label: "Áudio", icon: "audio-headphones-symbolic" },
             { id: "system", label: "Sistema", icon: "utilities-system-monitor-symbolic" },
+            { id: "focus", label: "Foco", icon: "alarm-symbolic" },
             { id: "antigravity", label: "Antigravity VU", icon: "applications-science-symbolic" },
             { id: "settings", label: "Ajustes", icon: "preferences-system-symbolic" },
         ];
@@ -2660,8 +3066,38 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 });
                 body.add_child(inactiveLabel);
             } else {
-                // Track Title & Artist
-                let trackBox = new St.BoxLayout({ vertical: true, style: "spacing: 2px;" });
+                // Album Cover + Track Title & Artist (Isle-inspired Media Header)
+                let trackRow = new St.BoxLayout({ style: "spacing: 10px;", y_align: Clutter.ActorAlign.CENTER, x_expand: true });
+                let artBox = new St.Bin({
+                    style: "width: 44px; height: 44px; border-radius: 10px; background-color: rgba(189, 147, 249, 0.14); border: 1px solid rgba(255, 255, 255, 0.12);",
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                let artLoaded = false;
+                if (media.art_url && String(media.art_url).startsWith("file://")) {
+                    try {
+                        let artFile = Gio.File.new_for_uri(String(media.art_url));
+                        if (artFile.query_exists(null)) {
+                            artBox.set_child(new St.Icon({
+                                gicon: new Gio.FileIcon({ file: artFile }),
+                                icon_size: 40,
+                            }));
+                            artLoaded = true;
+                        }
+                    } catch (e) {
+                        // fallback to symbolic icon
+                    }
+                }
+                if (!artLoaded) {
+                    artBox.set_child(new St.Icon({
+                        icon_name: "audio-x-generic-symbolic",
+                        icon_type: St.IconType.SYMBOLIC,
+                        icon_size: 20,
+                    }));
+                }
+                trackRow.add_child(artBox);
+
+                let trackBox = new St.BoxLayout({ vertical: true, style: "spacing: 2px;", x_expand: true });
                 let titleLabel = new St.Label({
                     text: media.title || "Sem título",
                     style_class: "dpi-media-title",
@@ -2677,7 +3113,8 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 });
                 artistLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
                 trackBox.add_child(artistLabel);
-                body.add_child(trackBox);
+                trackRow.add_child(trackBox);
+                body.add_child(trackRow);
 
                 // Progress Bar with Time Labels
                 let progressRow = new St.BoxLayout({

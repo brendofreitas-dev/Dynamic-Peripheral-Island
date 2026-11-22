@@ -563,7 +563,7 @@ class TestAppletCssAndDocs(unittest.TestCase):
         self.assertIn("_buildGpuCard(", src)
         self.assertIn("_buildRamCard(", src)
         self.assertIn("_buildDiskNetCard(", src)
-        self.assertIn('["peripherals", "audio", "system", "antigravity", "settings"]', src)
+        self.assertIn('["peripherals", "audio", "system", "focus", "antigravity", "settings"]', src)
 
         # UX-016: 100% GPU transition (duration: 280, EASE_OUT_CUBIC, opacity: 150) without white flash
         self.assertIn("Clutter.AnimationMode.EASE_OUT_CUBIC", src)

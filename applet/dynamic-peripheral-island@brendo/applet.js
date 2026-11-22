@@ -339,16 +339,24 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this._applyNotchStyle();
     }
 
-    _buildNotchInlineStyle(style, isLight, isActive) {
+    _buildNotchInlineStyle(style, isLight, isActive, isMenuOpen) {
+        let fuseBottom = Boolean(isMenuOpen && style !== "pill");
+        let radius = fuseBottom ? "0" : (style === "pill" ? "999px" : "0 0 16px 16px");
+        let pad = style === "pill"
+            ? (isActive ? "0 18px" : "0 14px")
+            : (isActive ? "0 16px 1px 16px" : "0 12px 1px 12px");
+
         if (style === "glass") {
             if (isLight) {
-                return isActive
-                    ? "background-gradient-direction: none; background-color: rgba(255, 255, 255, 0.82); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); border-bottom: 1px solid rgba(147, 51, 234, 0.50); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #0F172A;"
-                    : "background-gradient-direction: none; background-color: rgba(248, 250, 252, 0.62); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); border-bottom: 1px solid rgba(15, 23, 42, 0.16); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #0F172A;";
+                let bg = isActive ? "rgba(248, 250, 252, 0.76)" : "rgba(248, 250, 252, 0.62)";
+                let btm = fuseBottom ? "border-bottom: none;" : ("border-bottom: 1px solid " + (isActive ? "rgba(147, 51, 234, 0.50)" : "rgba(15, 23, 42, 0.16)") + ";");
+                let shd = fuseBottom ? "box-shadow: none;" : "box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);";
+                return "background-gradient-direction: none; background-color: " + bg + "; border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); " + btm + " " + shd + " border-radius: " + radius + "; margin-top: 0; padding: " + pad + "; color: #0F172A;";
             }
-            return isActive
-                ? "background-gradient-direction: none; background-color: rgba(30, 32, 46, 0.72); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); border-bottom: 1px solid rgba(189, 147, 249, 0.65); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #F8FAFC;"
-                : "background-gradient-direction: none; background-color: rgba(24, 26, 38, 0.58); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); border-bottom: 1px solid rgba(255, 255, 255, 0.22); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #F8FAFC;";
+            let bg = isActive ? "rgba(20, 22, 34, 0.68)" : "rgba(24, 26, 38, 0.58)";
+            let btm = fuseBottom ? "border-bottom: none;" : ("border-bottom: 1px solid " + (isActive ? "rgba(189, 147, 249, 0.65)" : "rgba(255, 255, 255, 0.22)") + ";");
+            let shd = fuseBottom ? "box-shadow: none;" : "box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);";
+            return "background-gradient-direction: none; background-color: " + bg + "; border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); " + btm + " " + shd + " border-radius: " + radius + "; margin-top: 0; padding: " + pad + "; color: #F8FAFC;";
         }
         if (style === "pill") {
             if (isLight) {
@@ -362,13 +370,35 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
         // Default: obsidian (Notch Sólido)
         if (isLight) {
-            return isActive
-                ? "background-gradient-direction: none; background-color: rgba(255, 255, 255, 0.98); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); border-bottom: 1px solid rgba(147, 51, 234, 0.45); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #0F172A;"
-                : "background-gradient-direction: none; background-color: #f1f5f9; border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); border-bottom: 1px solid rgba(15, 23, 42, 0.14); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #0F172A;";
+            let bg = isMenuOpen ? "#f1f5f9" : (isActive ? "rgba(255, 255, 255, 0.98)" : "#f1f5f9");
+            let btm = fuseBottom ? "border-bottom: none;" : ("border-bottom: 1px solid " + (isActive ? "rgba(147, 51, 234, 0.45)" : "rgba(15, 23, 42, 0.14)") + ";");
+            let shd = fuseBottom ? "box-shadow: none;" : "box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);";
+            return "background-gradient-direction: none; background-color: " + bg + "; border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); " + btm + " " + shd + " border-radius: " + radius + "; margin-top: 0; padding: " + pad + "; color: #0F172A;";
         }
-        return isActive
-            ? "background-gradient-direction: none; background-color: rgba(18, 20, 30, 0.98); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(189, 147, 249, 0.55); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.50); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 16px 1px 16px; color: #F8FAFC;"
-            : "background-gradient-direction: none; background-color: #0b0c12; border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40); border-radius: 0 0 16px 16px; margin-top: 0; padding: 0 12px 1px 12px; color: #F8FAFC;";
+        let bg = isMenuOpen ? "#0b0c12" : (isActive ? "rgba(18, 20, 30, 0.98)" : "#0b0c12");
+        let btm = fuseBottom ? "border-bottom: none;" : ("border-bottom: 1px solid " + (isActive ? "rgba(189, 147, 249, 0.55)" : "rgba(255, 255, 255, 0.12)") + ";");
+        let shd = fuseBottom ? "box-shadow: none;" : "box-shadow: 0 3px 12px rgba(0, 0, 0, 0.40);";
+        return "background-gradient-direction: none; background-color: " + bg + "; border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); " + btm + " " + shd + " border-radius: " + radius + "; margin-top: 0; padding: " + pad + "; color: #F8FAFC;";
+    }
+
+    _buildPopoverInlineStyle(style, isLight) {
+        if (style === "glass") {
+            if (isLight) {
+                return "background-gradient-direction: none; background-color: rgba(248, 250, 252, 0.76); border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.16); border-right: 1px solid rgba(15, 23, 42, 0.16); border-bottom: 1px solid rgba(15, 23, 42, 0.20); border-radius: 0 0 20px 20px; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18); margin-top: 0; color: #0F172A;";
+            }
+            return "background-gradient-direction: none; background-color: rgba(20, 22, 34, 0.68); border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.22); border-right: 1px solid rgba(255, 255, 255, 0.22); border-bottom: 1px solid rgba(255, 255, 255, 0.22); border-radius: 0 0 20px 20px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); margin-top: 0; color: #F8FAFC;";
+        }
+        if (style === "pill") {
+            if (isLight) {
+                return "background-gradient-direction: none; background-color: rgba(248, 250, 252, 0.94); border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 20px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16); margin-top: 6px; color: #0F172A;";
+            }
+            return "background-gradient-direction: none; background-color: rgba(18, 20, 30, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 20px; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.50); margin-top: 6px; color: #F8FAFC;";
+        }
+        // Default: obsidian (Notch Sólido fundido ao Popover)
+        if (isLight) {
+            return "background-gradient-direction: none; background-color: #f1f5f9; border-top: none; border-left: 1px solid rgba(15, 23, 42, 0.10); border-right: 1px solid rgba(15, 23, 42, 0.10); border-bottom: 1px solid rgba(15, 23, 42, 0.14); border-radius: 0 0 20px 20px; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16); margin-top: 0; color: #0F172A;";
+        }
+        return "background-gradient-direction: none; background-color: #0b0c12; border-top: none; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.12); border-radius: 0 0 20px 20px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); margin-top: 0; color: #F8FAFC;";
     }
 
     _applyNotchStyle() {
@@ -380,6 +410,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         }
         let targetClass = "dpi-notch-" + style;
         let isLight = this._resolvedTheme === "light";
+        let isMenuOpen = Boolean(this.menu && this.menu.isOpen);
 
         if (this._unifiedCenterBox) {
             try {
@@ -394,7 +425,7 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
                 let isActive = this._unifiedCenterBox.has_style_class_name("dpi-capsule-hovered")
                     || this._unifiedCenterBox.has_style_class_name("dpi-capsule-open");
-                this._unifiedCenterBox.set_style(this._buildNotchInlineStyle(style, isLight, isActive));
+                this._unifiedCenterBox.set_style(this._buildNotchInlineStyle(style, isLight, isActive, isMenuOpen));
                 this.actor.set_style(null);
             } catch (e) {
                 // ignore
@@ -411,7 +442,24 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 }
                 let isActive = this.actor.has_style_class_name("dpi-capsule-hovered")
                     || this.actor.has_style_class_name("dpi-capsule-open");
-                this.actor.set_style(this._buildNotchInlineStyle(style, isLight, isActive));
+                this.actor.set_style(this._buildNotchInlineStyle(style, isLight, isActive, isMenuOpen));
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        // Sync Popover surface with Notch style so TopBar + Popover act as one seamless Isle
+        if (this._popoverRoot) {
+            try {
+                for (let s of validStyles) {
+                    let cls = "dpi-notch-" + s;
+                    if (cls === targetClass) {
+                        this._popoverRoot.add_style_class_name(cls);
+                    } else {
+                        this._popoverRoot.remove_style_class_name(cls);
+                    }
+                }
+                this._popoverRoot.set_style(this._buildPopoverInlineStyle(style, isLight));
             } catch (e) {
                 // ignore
             }
@@ -2130,6 +2178,22 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
         this.menu = new Applet.AppletPopupMenu(this, orientation);
         this.menuManager.addMenu(this.menu);
 
+        // Strip Cinnamon's default PopupMenu chrome/arrow/gap so Notch + Popover fuse seamlessly
+        try {
+            if (this.menu.actor) {
+                this.menu.actor.set_style(
+                    "background-gradient-direction: none; background-color: transparent; border: none; box-shadow: none; padding: 0; margin: 0; -arrow-rise: 0px; -arrow-base: 0px; -boxpointer-gap: 0px;"
+                );
+            }
+            if (this.menu.box) {
+                this.menu.box.set_style(
+                    "background-gradient-direction: none; background-color: transparent; border: none; box-shadow: none; padding: 0; margin: 0;"
+                );
+            }
+        } catch (e) {
+            // ignore
+        }
+
         this.menu.connect("open-state-changed", (menu, isOpen) => {
             if (!isOpen) {
                 this._cancelTabHoverTimer();
@@ -3046,28 +3110,29 @@ class DynamicPeripheralIslandApplet extends Applet.Applet {
                 });
                 body.add_child(inactiveLabel);
             } else {
-                // Album Cover + Track Title & Artist (Isle-inspired Media Header)
+                // Album Cover + Track Title & Artist (Isle-inspired Media Header, clipped cleanly via background-image)
                 let trackRow = new St.BoxLayout({ style: "spacing: 10px;", y_align: Clutter.ActorAlign.CENTER, x_expand: true });
-                let artBox = new St.Bin({
-                    style: "width: 44px; height: 44px; border-radius: 10px; background-color: rgba(189, 147, 249, 0.14); border: 1px solid rgba(255, 255, 255, 0.12);",
-                    x_align: Clutter.ActorAlign.CENTER,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
+                let artStyle = "width: 44px; height: 44px; border-radius: 10px; background-color: rgba(189, 147, 249, 0.14); border: 1px solid rgba(255, 255, 255, 0.14);";
                 let artLoaded = false;
                 if (media.art_url && String(media.art_url).startsWith("file://")) {
                     try {
                         let artFile = Gio.File.new_for_uri(String(media.art_url));
                         if (artFile.query_exists(null)) {
-                            artBox.set_child(new St.Icon({
-                                gicon: new Gio.FileIcon({ file: artFile }),
-                                icon_size: 40,
-                            }));
-                            artLoaded = true;
+                            let artPath = artFile.get_path();
+                            if (artPath) {
+                                artStyle = "width: 44px; height: 44px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.16); background-image: url(\"" + artPath + "\"); background-size: cover;";
+                                artLoaded = true;
+                            }
                         }
                     } catch (e) {
                         // fallback to symbolic icon
                     }
                 }
+                let artBox = new St.Bin({
+                    style: artStyle,
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
                 if (!artLoaded) {
                     artBox.set_child(new St.Icon({
                         icon_name: "audio-x-generic-symbolic",
